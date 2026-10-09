@@ -104,6 +104,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IFolderPicker, AndroidFolderPicker>();
         builder.Services.AddSingleton<IFolderFileAccess, AndroidFolderFileAccess>();
         builder.Services.AddSingleton<IEmulatorDetectionService, AndroidEmulatorScanner>();
+        builder.Services.AddSingleton<IAppPlatform, Platforms.Android.AndroidAppPlatform>();
 #elif PKFORGE_DESKTOP
         builder.Services.AddSingleton<ISaveFileAccess, Platforms.Desktop.PosixSaveFileAccess>();
         builder.Services.AddSingleton<IMusicPlayer, Platforms.Desktop.DesktopMusicPlayer>();
@@ -112,6 +113,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IFolderPicker, Platforms.Desktop.DesktopFolderPicker>();
         builder.Services.AddSingleton<IFolderFileAccess, Platforms.Desktop.PosixFolderFileAccess>();
         builder.Services.AddSingleton<IEmulatorDetectionService, Platforms.Desktop.DesktopEmulatorScanner>();
+        builder.Services.AddSingleton<IAppPlatform, Platforms.Desktop.DesktopAppPlatform>();
 
         var desktopDisplay = new Platforms.Desktop.DesktopDeviceDisplay();
         builder.Services.AddSingleton<Microsoft.Maui.Devices.IDeviceDisplay>(desktopDisplay);

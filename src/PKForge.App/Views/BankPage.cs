@@ -31,6 +31,7 @@ public sealed class BankPage : ContentPage, IPadPagingHandler
     private readonly BoxBrowserViewModel _boxViewModel; // for send-to-game and shared status
     private readonly BankFacts _facts;
     private readonly IGameDataService _data;
+    private readonly IAppPlatform _appPlatform;
     private readonly SKCanvasView _canvas;
     private readonly FrameInvalidator _frame;
     private readonly Grid _hostGrid;
@@ -49,13 +50,15 @@ public sealed class BankPage : ContentPage, IPadPagingHandler
     // The current box's slot->entry map, rebuilt only when the box or bank changes.
     private Dictionary<int, BankEntry> _boxEntries = new();
 
-    public BankPage(IBankService bank, ISpriteService sprites, BoxBrowserViewModel boxViewModel, IGameDataService data)
+    public BankPage(IBankService bank, ISpriteService sprites, BoxBrowserViewModel boxViewModel, IGameDataService data, IAppPlatform? appPlatform = null)
     {
         _bank = bank;
         _sprites = sprites;
         _boxViewModel = boxViewModel;
         _facts = new BankFacts(bank, data);
         _data = data;
+        _appPlatform = appPlatform ?? IPlatformApplication.Current?.Services.GetRequiredService<IAppPlatform>()
+            ?? throw new InvalidOperationException("IAppPlatform is unavailable.");
         Title = "Bank";
         NavigationPage.SetHasNavigationBar(this, false);
 
@@ -1570,7 +1573,7 @@ public sealed class BankPage : ContentPage, IPadPagingHandler
             var name = $"{entry.Info.Species:000} - {entry.Info.Nickname}{BankEntryFiles.ExtensionFor(entry.Info)}";
             var path = System.IO.Path.Combine(FileSystem.CacheDirectory, name);
             await File.WriteAllBytesAsync(path, bytes);
-            await Share.Default.RequestAsync(new ShareFileRequest { Title = name, File = new ShareFile(path) });
+            await _appPlatform.ExportFilesAsync(name, [path]);
         }
         catch (Exception error)
         {

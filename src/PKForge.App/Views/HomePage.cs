@@ -13,6 +13,7 @@ namespace PKForge.App.Views;
 public sealed class HomePage : ContentPage, IPadHandler
 {
     private readonly SavePickerViewModel _viewModel;
+    private readonly IAppPlatform _appPlatform;
     private ScrollView _shelf = null!;
     private HorizontalStackLayout _shelfItems = null!;
     private int _shelfIndex = -1;
@@ -22,9 +23,11 @@ public sealed class HomePage : ContentPage, IPadHandler
     private PokeparkPage? _parkPage;
     private int _parkNavigationPending;
 
-    public HomePage(SavePickerViewModel viewModel)
+    public HomePage(SavePickerViewModel viewModel, IAppPlatform? appPlatform = null)
     {
         _viewModel = viewModel;
+        _appPlatform = appPlatform ?? IPlatformApplication.Current?.Services.GetRequiredService<IAppPlatform>()
+            ?? throw new InvalidOperationException("IAppPlatform is unavailable.");
         BindingContext = viewModel;
         Title = "PKForge";
         BackgroundColor = UiTokens.Housing;
@@ -1020,7 +1023,7 @@ public sealed class HomePage : ContentPage, IPadHandler
                 ["scan-report.txt"] = _viewModel.ScanReport,
             }));
             AppLog.MarkCrashesSeen();
-            await Share.Default.RequestAsync(new ShareFileRequest("PKForge logs", new ShareFile(archive, "application/zip")));
+            await _appPlatform.ExportFilesAsync("PKForge logs", [archive]);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
