@@ -113,6 +113,25 @@ public static class MauiProgram
         builder.Services.AddSingleton<IFolderFileAccess, Platforms.Desktop.PosixFolderFileAccess>();
         builder.Services.AddSingleton<IEmulatorDetectionService, Platforms.Desktop.DesktopEmulatorScanner>();
 
+        var desktopDisplay = new Platforms.Desktop.DesktopDeviceDisplay();
+        builder.Services.AddSingleton<Microsoft.Maui.Devices.IDeviceDisplay>(desktopDisplay);
+        typeof(Microsoft.Maui.Devices.DeviceDisplay).GetMethod("SetCurrent", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.Invoke(null, [desktopDisplay]);
+
+        var desktopAppInfo = new Platforms.Desktop.DesktopAppInfo();
+        builder.Services.AddSingleton<Microsoft.Maui.ApplicationModel.IAppInfo>(desktopAppInfo);
+        typeof(Microsoft.Maui.ApplicationModel.AppInfo).GetMethod("SetCurrent", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.Invoke(null, [desktopAppInfo]);
+
+        var desktopLauncher = new Platforms.Desktop.DesktopLauncher();
+        builder.Services.AddSingleton<Microsoft.Maui.ApplicationModel.ILauncher>(desktopLauncher);
+        typeof(Microsoft.Maui.ApplicationModel.Launcher).GetMethod("SetDefault", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.Invoke(null, [desktopLauncher]);
+
+        var desktopClipboard = new Platforms.Desktop.DesktopClipboard();
+        builder.Services.AddSingleton<Microsoft.Maui.ApplicationModel.DataTransfer.IClipboard>(desktopClipboard);
+        typeof(Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard).GetMethod("SetDefault", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.Invoke(null, [desktopClipboard]);
+
+        var desktopConnectivity = new Platforms.Desktop.DesktopConnectivity();
+        builder.Services.AddSingleton<Microsoft.Maui.Networking.IConnectivity>(desktopConnectivity);
+        typeof(Microsoft.Maui.Networking.Connectivity).GetMethod("SetCurrent", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.Invoke(null, [desktopConnectivity]);
 #endif
         builder.Services.AddSingleton<IWatchedRootStore, PreferencesWatchedRootStore>();
         builder.Services.AddSingleton<BoxBrowserViewModel>();

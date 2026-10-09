@@ -1,3 +1,4 @@
+using PKForge.App.Services;
 using PKForge.App.Theme;
 using PKForge.Chrome;
 using SkiaSharp;
@@ -21,16 +22,11 @@ internal static class EditorRows
     /// A length in mockup pixels (the 1920×1080 design) as device-independent units on this
     /// display: exact on the Thor's 1920×1080 screen, scaled with the screen elsewhere.
     /// </summary>
-    internal static double Design(double pixels)
-    {
-        var display = DeviceDisplay.MainDisplayInfo;
-        var longSide = Math.Max(display.Width, display.Height);
-        return longSide <= 0 || display.Density <= 0 ? pixels / 2 : pixels * (longSide / 1920) / display.Density;
-    }
+    internal static double Design(double pixels) => ScreenMetrics.Design(pixels);
 
     /// <summary>A row's height and text size (the mockup's 64 and 32 pixels).</summary>
-    internal static readonly double EditorRowHeight = Design(64);
-    internal static readonly double EditorText = Design(32);
+    internal static double EditorRowHeight => Design(64);
+    internal static double EditorText => Design(32);
 
     internal static Color RowBand(bool dark) => EditorPaint.RowBand(dark).ToMauiColor();
 
@@ -104,7 +100,7 @@ internal static class EditorRows
             {
                 if (view is EditorEntry)
                 {
-                    var bottom = (int)(Design(10) * DeviceDisplay.MainDisplayInfo.Density);
+                    var bottom = (int)(Design(10) * ScreenMetrics.Density);
                     handler.PlatformView.SetPadding(handler.PlatformView.PaddingLeft, 0, handler.PlatformView.PaddingRight, bottom);
                 }
             });

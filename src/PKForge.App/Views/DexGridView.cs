@@ -142,8 +142,7 @@ public sealed class DexGridView : SKCanvasView
         var width = CanvasSize.Width;
         if (width <= 0 || Math.Abs(width - _laidOutWidth) < 0.5f) return;
         _laidOutWidth = width;
-        var display = DeviceDisplay.MainDisplayInfo;
-        _unit = (float)(Math.Max(display.Width, display.Height) / 1920.0);
+        _unit = (float)(ScreenMetrics.LongSidePx / 1920.0);
         if (_unit <= 0) _unit = 1;
         var cellW = CellWidth * _unit;
         var cellH = CellHeight * _unit;

@@ -1,4 +1,5 @@
 using Microsoft.Maui.Controls.Shapes;
+using PKForge.App.Services;
 using PKForge.App.Theme;
 using PKForge.Chrome;
 using SkiaSharp;
@@ -32,7 +33,7 @@ public sealed class DsFolderButton : Grid
         ColumnDefinitions = [new(new GridLength(30)), new(new GridLength(30)), new(GridLength.Star)];
 
         _bg = new SKCanvasView { InputTransparent = true };
-        _bg.PaintSurface += (_, args) => DrawRow(args.Surface.Canvas, args.Info, _selected);
+        _bg.PaintSurface += (s, args) => DrawRow(args.Surface.Canvas, args.Info, _selected, ScreenMetrics.CanvasDensity(s, args.Info));
 
         // The icon column: a bundled PKSM pixel icon when the option carries a semantic
         // name, else the accent glyph. White on blue buttons, indigo when selected.
@@ -188,10 +189,11 @@ public sealed class DsFolderButton : Grid
     /// Draws a flat list row (a fact row inside a panel, not a button): soft stripe resting,
     /// the selected-button look under the cursor.
     /// </summary>
-    internal static void DrawListRow(SKCanvas canvas, SKImageInfo info, bool selected)
+    internal static void DrawListRow(SKCanvas canvas, SKImageInfo info, bool selected, float density = 0f)
     {
         canvas.Clear(SKColors.Transparent);
-        var d = (float)DeviceDisplay.MainDisplayInfo.Density;
+        var d = density > 0 ? density : (float)ScreenMetrics.Density;
+        if (d <= 0) d = 1f;
         canvas.Save();
         canvas.Scale(d);
         PksmPaint.StripeRow(canvas, new SKRect(0.5f, 1, info.Width / d - 0.5f, info.Height / d - 1), selected);
@@ -199,11 +201,12 @@ public sealed class DsFolderButton : Grid
     }
 
     /// <summary>Draws the row chrome: the resting menu button, or the cobalt selected look.</summary>
-    internal static void DrawRow(SKCanvas canvas, SKImageInfo info, bool selected)
+    internal static void DrawRow(SKCanvas canvas, SKImageInfo info, bool selected, float density = 0f)
     {
         // Radius and edges scale with density so the row matches the MAUI-drawn buttons.
         canvas.Clear(SKColors.Transparent);
-        var d = (float)DeviceDisplay.MainDisplayInfo.Density;
+        var d = density > 0 ? density : (float)ScreenMetrics.Density;
+        if (d <= 0) d = 1f;
         canvas.Save();
         canvas.Scale(d);
         var r = new SKRect(0.5f, 0.5f, info.Width / d - 0.5f, info.Height / d - 0.5f);
@@ -325,7 +328,7 @@ public sealed class DsCard : Grid
         HeightRequest = height;
 
         _bg = new SKCanvasView { InputTransparent = true };
-        _bg.PaintSurface += (_, a) => DrawTile(a.Surface.Canvas, a.Info, _selected);
+        _bg.PaintSurface += (s, a) => DrawTile(a.Surface.Canvas, a.Info, _selected, ScreenMetrics.CanvasDensity(s, a.Info));
 
         _iconCanvas = new SKCanvasView { InputTransparent = true, WidthRequest = 36, HeightRequest = 36 };
         _iconCanvas.PaintSurface += (_, a) =>
@@ -373,10 +376,11 @@ public sealed class DsCard : Grid
     }
 
     /// <summary>The resting menu tile; the cobalt selected look when chosen.</summary>
-    internal static void DrawTile(SKCanvas canvas, SKImageInfo info, bool selected)
+    internal static void DrawTile(SKCanvas canvas, SKImageInfo info, bool selected, float density = 0f)
     {
         canvas.Clear(SKColors.Transparent);
-        var d = (float)DeviceDisplay.MainDisplayInfo.Density;
+        var d = density > 0 ? density : (float)ScreenMetrics.Density;
+        if (d <= 0) d = 1f;
         canvas.Save();
         canvas.Scale(d);
         var r = new SKRect(0.5f, 0.5f, info.Width / d - 0.5f, info.Height / d - 0.5f);

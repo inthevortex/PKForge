@@ -12,7 +12,7 @@ namespace PKForge.App.Views;
 
 file static class DpScale
 {
-    public static float Value => (float)DeviceDisplay.MainDisplayInfo.Density;
+    public static float Value => (float)ScreenMetrics.Density;
 }
 
 /// <summary>
@@ -356,7 +356,7 @@ public static class EncounterGallery
             var canvas = args.Surface.Canvas;
             canvas.Clear(SKColors.Transparent);
             // Laid out in dp (row heights, card widths): scale the pixel canvas to match.
-            var density = (float)DeviceDisplay.MainDisplayInfo.Density;
+            var density = ScreenMetrics.CanvasDensity(sender, args.Info);
             canvas.Scale(density);
             var info = new SKImageInfo((int)(args.Info.Width / density), (int)(args.Info.Height / density));
             _rowsPerScreen = Math.Max(2, (int)((info.Height - 8 + Gap) / (RowH + Gap)));
@@ -664,7 +664,7 @@ public static class EncounterGallery
             var canvas = args.Surface.Canvas;
             canvas.Clear(SKColors.Transparent);
             // Laid out in dp (row heights, card widths): scale the pixel canvas to match.
-            var density = (float)DeviceDisplay.MainDisplayInfo.Density;
+            var density = ScreenMetrics.CanvasDensity(sender, args.Info);
             canvas.Scale(density);
             var info = new SKImageInfo((int)(args.Info.Width / density), (int)(args.Info.Height / density));
 

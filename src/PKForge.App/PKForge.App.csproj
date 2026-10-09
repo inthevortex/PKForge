@@ -64,6 +64,7 @@
     <MauiIcon Include="Resources/AppIcon/pkforge.png" Color="#14121D" />
     <MauiSplashScreen Include="Resources/Splash/splash.png" Color="#14121D" BaseSize="180,180" />
     <MauiFont Include="Resources/Fonts/*.ttf" />
+    <MauiAsset Include="Resources/Fonts/*.ttf" LogicalName="fonts/%(Filename)%(Extension)" Condition="'$(TargetFramework)' == 'net11.0'" />
   </ItemGroup>
   <ItemGroup>
     <!-- Bundled fallback sprites from pristine PKHeX submodule (always offline-available). -->

@@ -1,3 +1,4 @@
+using PKForge.App.Services;
 using SkiaSharp;
 
 namespace PKForge.App.Views;
@@ -32,21 +33,44 @@ public static class PixelFont
             return _loadTask ??= Task.Run(Load);
     }
 
+    private static Stream OpenFontPackageFile(string fontName)
+    {
+        try
+        {
+            return FileSystem.OpenAppPackageFileAsync("fonts/" + fontName).GetAwaiter().GetResult();
+        }
+        catch
+        {
+            return FileSystem.OpenAppPackageFileAsync(fontName).GetAwaiter().GetResult();
+        }
+    }
+
+    private static SKTypeface FallbackWithWarning(string fontName)
+    {
+#if DEBUG
+        AppLog.Warn("fonts", $"SKTypeface fallback occurred for {fontName}");
+#endif
+        return SKTypeface.Default;
+    }
+
     private static void Load()
     {
         SKTypeface face;
         try
         {
-            using var stream = FileSystem.OpenAppPackageFileAsync("NDS12.ttf").GetAwaiter().GetResult();
+            using var stream = OpenFontPackageFile("NDS12.ttf");
             using var bytes = new MemoryStream();
             stream.CopyTo(bytes);
             var cache = System.IO.Path.Combine(FileSystem.CacheDirectory, "NDS12.ttf");
             File.WriteAllBytes(cache, bytes.ToArray());
-            face = SKTypeface.FromFile(cache) ?? SKTypeface.Default;
+            face = SKTypeface.FromFile(cache) ?? FallbackWithWarning("NDS12.ttf");
         }
-        catch
+        catch (Exception ex)
         {
-            face = SKTypeface.Default;
+#if DEBUG
+            AppLog.Warn("fonts", $"Failed to load NDS12.ttf: {ex.Message}");
+#endif
+            face = FallbackWithWarning("NDS12.ttf");
         }
         Volatile.Write(ref _face, face);
     }
@@ -75,16 +99,19 @@ public static class PixelFont
                 try
                 {
                     // MauiFont resources land at the assets root, not in Fonts/.
-                    using var stream = FileSystem.OpenAppPackageFileAsync("MPLUSRounded1c-Regular.ttf").GetAwaiter().GetResult();
+                    using var stream = OpenFontPackageFile("MPLUSRounded1c-Regular.ttf");
                     using var bytes = new MemoryStream();
                     stream.CopyTo(bytes);
                     var cache = System.IO.Path.Combine(FileSystem.CacheDirectory, "MPLUSRounded1c-Regular.ttf");
                     File.WriteAllBytes(cache, bytes.ToArray());
-                    face = SKTypeface.FromFile(cache) ?? SKTypeface.Default;
+                    face = SKTypeface.FromFile(cache) ?? FallbackWithWarning("MPLUSRounded1c-Regular.ttf");
                 }
-                catch
+                catch (Exception ex)
                 {
-                    face = SKTypeface.Default;
+#if DEBUG
+                    AppLog.Warn("fonts", $"Failed to load MPLUSRounded1c-Regular.ttf: {ex.Message}");
+#endif
+                    face = FallbackWithWarning("MPLUSRounded1c-Regular.ttf");
                 }
                 Volatile.Write(ref _fallback, face);
             });

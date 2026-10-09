@@ -196,7 +196,7 @@ public sealed class MonSummaryView : ContentView
     private SKSize BeginDesign(SKCanvas canvas, SKImageInfo info, View view)
     {
         canvas.Clear(SKColors.Transparent);
-        var pxPerDp = view.Width > 0 ? (float)(info.Width / view.Width) : (float)Math.Max(1, DeviceDisplay.MainDisplayInfo.Density);
+        var pxPerDp = view.Width > 0 ? (float)(info.Width / view.Width) : (float)Math.Max(1, ScreenMetrics.Density);
         var scale = pxPerDp * _unit;
         canvas.Scale(scale);
         return new SKSize(info.Width / scale, info.Height / scale);

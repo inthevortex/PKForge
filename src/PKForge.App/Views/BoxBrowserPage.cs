@@ -464,17 +464,36 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
             var cache = System.IO.Path.Combine(FileSystem.CacheDirectory, "NDS12.ttf");
             if (!File.Exists(cache))
             {
-                using var asset = FileSystem.OpenAppPackageFileAsync("NDS12.ttf").GetAwaiter().GetResult();
-                using var output = File.Create(cache);
-                asset.CopyTo(output);
+                Stream asset;
+                try
+                {
+                    asset = FileSystem.OpenAppPackageFileAsync("fonts/NDS12.ttf").GetAwaiter().GetResult();
+                }
+                catch
+                {
+                    asset = FileSystem.OpenAppPackageFileAsync("NDS12.ttf").GetAwaiter().GetResult();
+                }
+                using (asset)
+                using (var output = File.Create(cache))
+                {
+                    asset.CopyTo(output);
+                }
             }
             _pixelTypeface = SKTypeface.FromFile(cache);
         }
-        catch
+        catch (Exception ex)
         {
-            // ignored: fall back to the bold system face below
+#if DEBUG
+            AppLog.Warn("fonts", $"Failed to load NDS12.ttf in PixelTypeface: {ex.Message}");
+#endif
         }
-        _pixelTypeface ??= SKTypeface.FromFamilyName(null, SKFontStyle.Bold);
+        if (_pixelTypeface is null)
+        {
+#if DEBUG
+            AppLog.Warn("fonts", "SKTypeface fallback occurred for NDS12.ttf in PixelTypeface");
+#endif
+            _pixelTypeface = SKTypeface.FromFamilyName(null, SKFontStyle.Bold);
+        }
         return _pixelTypeface;
     }
 
@@ -3499,7 +3518,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
                 HorizontalOptions = LayoutOptions.Center,
             };
             var canvas = new SKCanvasView { InputTransparent = true };
-            canvas.PaintSurface += (_, args) =>
+            canvas.PaintSurface += (s, args) =>
             {
                 var c = args.Surface.Canvas;
                 c.Clear(SKColors.Transparent);
@@ -3510,7 +3529,8 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
                 var r = new SKRect(cx - radius, cy - radius, cx + radius, cy + radius);
                 using var fill = new SKPaint { Color = Pksm.BagNavy, IsAntialias = true };
                 using var inner = new SKPaint { Color = Pksm.BagNavyDeep, IsAntialias = true };
-                using var rim = new SKPaint { Color = Pksm.LogoGrid, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f * (float)DeviceDisplay.MainDisplayInfo.Density };
+                var density = ScreenMetrics.CanvasDensity(s, info);
+                using var rim = new SKPaint { Color = Pksm.LogoGrid, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f * density };
                 using var arm = new SKPaint { Color = Pksm.Ink, IsAntialias = true };
                 c.DrawOval(r, fill);
                 c.DrawOval(SKRect.Inflate(r, -1.5f, -1.5f), inner);
