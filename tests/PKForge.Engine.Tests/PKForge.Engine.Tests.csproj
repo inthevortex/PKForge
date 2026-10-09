@@ -14,4 +14,8 @@
     <ProjectReference Include="../../src/PKForge.Engine/PKForge.Engine.csproj" />
     <ProjectReference Include="../../src/PKForge.Infrastructure/PKForge.Infrastructure.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../../src/PKForge.App/Services/PadInputPump.cs" />
+    <Compile Include="../../src/PKForge.App/Services/GamepadRouting.cs" />
+  </ItemGroup>
 </Project>

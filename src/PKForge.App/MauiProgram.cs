@@ -96,6 +96,11 @@ public static class MauiProgram
         builder.Services.AddSingleton<AppUpdateService>();
         builder.Services.AddSingleton<TransferService>();
 #if ANDROID
+        builder.Services.AddSingleton<PadInputPump>(sp => new PadInputPump(
+            sp.GetRequiredService<GamepadRouter>(),
+            onHaptic: () => { try { Microsoft.Maui.Devices.HapticFeedback.Default.Perform(Microsoft.Maui.Devices.HapticFeedbackType.Click); } catch { } },
+            dispatchToUi: action => Microsoft.Maui.ApplicationModel.MainThread.BeginInvokeOnMainThread(action)
+        ));
         builder.Services.AddSingleton<ISaveFileAccess, AndroidSafFileAccess>();
         builder.Services.AddSingleton<Platforms.Android.MusicPlayer>();
         builder.Services.AddSingleton<IMusicPlayer>(sp => sp.GetRequiredService<Platforms.Android.MusicPlayer>());
@@ -109,6 +114,11 @@ public static class MauiProgram
         builder.Services.AddSingleton<IEmulatorRootDiscovery, NullEmulatorRootDiscovery>();
         builder.Services.AddSingleton<IAppPlatform, Platforms.Android.AndroidAppPlatform>();
 #elif PKFORGE_DESKTOP
+        builder.Services.AddSingleton<PadInputPump>(sp => new PadInputPump(
+            sp.GetRequiredService<GamepadRouter>(),
+            onHaptic: null,
+            dispatchToUi: action => Avalonia.Threading.Dispatcher.UIThread.Post(action)
+        ));
         builder.Services.AddSingleton<ISaveFileAccess, Platforms.Desktop.PosixSaveFileAccess>();
         builder.Services.AddSingleton<IMusicPlayer, Platforms.Desktop.DesktopMusicPlayer>();
         builder.Services.AddSingleton<IDocumentPicker, Platforms.Desktop.DesktopDocumentPicker>();

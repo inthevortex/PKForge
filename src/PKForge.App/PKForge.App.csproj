@@ -7,6 +7,7 @@
     <SingleProject Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">true</SingleProject>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <!-- Suppress CS0618 (obsolete warnings from SkiaSharp 4 SKPath methods and MAUI Application.MainPage) -->
     <NoWarn>$(NoWarn);CS0618</NoWarn>
@@ -49,6 +50,7 @@
     <PackageReference Include="Avalonia.Controls.Maui.SkiaSharp.Views" Version="11.0.0-rc.1.26252.343" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="ZXing.Net" Version="0.16.10" />
+    <PackageReference Include="ppy.SDL3-CS" Version="2026.1002.1" />
   </ItemGroup>
 
   <!-- Platform source file separation -->
@@ -92,9 +94,7 @@
          Tauros, the Legends: Z-A megas, Urshifu Rapid Strike, ... and the sprite resolver
          (SpriteCatalog) shows the exact form's artwork before ever falling back to the
          base form. Overlaps with a_9*/a_10* are the same files under the same name. -->
-    <MauiAsset Include="../../external/PKHeX/PKHeX.Drawing.PokeSprite/Resources/img/Artwork Pokemon Sprites/a_*-*.png"
-               Exclude="../../external/PKHeX/PKHeX.Drawing.PokeSprite/Resources/img/Artwork Pokemon Sprites/a_9*.png;../../external/PKHeX/PKHeX.Drawing.PokeSprite/Resources/img/Artwork Pokemon Sprites/a_10*.png"
-               LogicalName="artwork/%(Filename)%(Extension)" />
+    <MauiAsset Include="../../external/PKHeX/PKHeX.Drawing.PokeSprite/Resources/img/Artwork Pokemon Sprites/a_*-*.png" Exclude="../../external/PKHeX/PKHeX.Drawing.PokeSprite/Resources/img/Artwork Pokemon Sprites/a_9*.png;../../external/PKHeX/PKHeX.Drawing.PokeSprite/Resources/img/Artwork Pokemon Sprites/a_10*.png" LogicalName="artwork/%(Filename)%(Extension)" />
     <MauiAsset Include="../../external/PKHeX/PKHeX.Drawing.PokeSprite/Resources/img/ball/*.png" LogicalName="balls/%(Filename)%(Extension)" />
     <!-- PKHeX's complete, format-accurate ribbon/mark artwork (GPL-3). -->
     <MauiAsset Include="../../external/PKHeX/PKHeX.Drawing.Misc/Resources/img/ribbons/*.png" LogicalName="ribbons/%(Filename)%(Extension)" />
