@@ -59,9 +59,11 @@ public sealed class EmulatorTreeScanner<TNode>(
             found = kind switch
             {
                 EmulatorKind.RetroArch or EmulatorKind.MelonDS or EmulatorKind.Linkboy or
-                EmulatorKind.DraStic or EmulatorKind.PizzaBoyGba or EmulatorKind.PizzaBoyGbc or EmulatorKind.Dolphin =>
+                EmulatorKind.DraStic or EmulatorKind.PizzaBoyGba or EmulatorKind.PizzaBoyGbc or
+                EmulatorKind.Dolphin or EmulatorKind.RomFolder or EmulatorKind.MGba =>
                     ScanFlatFolder(root, kind, cancellationToken, state, onSave),
                 EmulatorKind.Eden => ScanEden(root, cancellationToken, state, onSave),
+                EmulatorKind.Ryujinx => ScanRyujinx(root, cancellationToken, state, onSave),
                 EmulatorKind.Azahar or EmulatorKind.CitraMmj => ScanThreeDs(root, kind, cancellationToken, state, onSave),
                 _ => [],
             };
@@ -149,6 +151,7 @@ public sealed class EmulatorTreeScanner<TNode>(
             EmulatorKind.Dolphin => ["GC"],
             EmulatorKind.DraStic => ["backup"],
             EmulatorKind.PizzaBoyGba or EmulatorKind.PizzaBoyGbc => ["save", "saves"],
+            EmulatorKind.RomFolder or EmulatorKind.MGba => [],
             _ => ["saves"],
         };
         var savesDirs = rootChildren.Where(x => x.IsDirectory && preferredFolders.Contains(x.Name, StringComparer.OrdinalIgnoreCase)).ToArray();
@@ -236,6 +239,121 @@ public sealed class EmulatorTreeScanner<TNode>(
     private static bool IsEdenDirectChild(string name) =>
         string.Equals(name, "account", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(name, "0000000000000000", StringComparison.OrdinalIgnoreCase);
+
+    private List<DetectedSave> ScanRyujinx(TNode root, CancellationToken cancellationToken,
+        ScanState state, Action<DetectedSave>? onSave)
+    {
+        var rootName = tree.RootName(root);
+        TNode? userSaveDir = null;
+        Dictionary<ulong, ulong> imkvdbMap = [];
+
+        // 1. Probe for imkvdb.arc
+        string[][] imkvdbPaths =
+        [
+            ["bis", "system", "save", "8000000000000000", "0"],
+            ["system", "save", "8000000000000000", "0"],
+            ["8000000000000000", "0"]
+        ];
+        foreach (var path in imkvdbPaths)
+        {
+            var dir = NavigatePath(root, path, state.Trace);
+            if (dir is not null)
+            {
+                var arcFile = tree.List(dir).FirstOrDefault(x => !x.IsDirectory && string.Equals(x.Name, "imkvdb.arc", StringComparison.OrdinalIgnoreCase));
+                if (arcFile.Node is not null)
+                {
+                    state.Trace($"Found imkvdb.arc at {tree.DocumentId(arcFile.Node)}");
+                    using var stream = tree.OpenRead(arcFile.Node);
+                    if (stream is not null)
+                    {
+                        using var ms = new MemoryStream();
+                        stream.CopyTo(ms);
+                        imkvdbMap = RyujinxImkvdbParser.Parse(ms.ToArray());
+                        state.Trace($"Parsed {imkvdbMap.Count} entries from imkvdb.arc");
+                    }
+                    break;
+                }
+            }
+        }
+
+        // 2. Locate user save directory
+        if (string.Equals(rootName, "save", StringComparison.OrdinalIgnoreCase))
+        {
+            state.Trace($"Ryujinx root grant recognized by root name '{rootName}'");
+            userSaveDir = root;
+        }
+        else
+        {
+            string[][] userSavePaths =
+            [
+                ["bis", "user", "save"],
+                ["user", "save"],
+                ["save"]
+            ];
+            foreach (var path in userSavePaths)
+            {
+                state.Trace($"Trying Ryujinx save prefix {string.Join('/', path)}");
+                userSaveDir = NavigatePath(root, path, state.Trace);
+                if (userSaveDir is not null)
+                {
+                    state.Trace($"User save root found via prefix {string.Join('/', path)}");
+                    break;
+                }
+            }
+        }
+
+        userSaveDir ??= root;
+
+        // 3. Recursively find saves
+        var results = new List<DetectedSave>();
+        FindFilesRecursive(userSaveDir, EdenMaxDepth, cancellationToken, child =>
+        {
+            state.FilesSeen++;
+            if (!IsRyujinxSaveFileName(child.Name))
+            {
+                state.Trace($"SKIP file name={child.Name} docId={tree.DocumentId(child.Node)}");
+                return;
+            }
+
+            state.Trace($"CANDIDATE name={child.Name} modified={child.LastModified?.ToString("O") ?? "unknown"} docId={tree.DocumentId(child.Node)}");
+            var pathLike = tree.PathLike(child.Node);
+            var label = ResolveRyujinxGameLabel(pathLike, imkvdbMap);
+            if (TryDetect(child, EmulatorKind.Ryujinx, label, state) is { } save)
+            {
+                results.Add(save);
+                onSave?.Invoke(save);
+            }
+            else
+                state.Rejected.Add(child.Name);
+        }, state, diagnostic: true);
+
+        return results;
+    }
+
+    private static bool IsRyujinxSaveFileName(string name) =>
+        string.Equals(name, "main", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(name, "SaveData.bin", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(name, "savedata.bin", StringComparison.OrdinalIgnoreCase) ||
+        name.EndsWith(".bin", StringComparison.OrdinalIgnoreCase);
+
+    private static string ResolveRyujinxGameLabel(string pathLike, Dictionary<ulong, ulong> imkvdbMap)
+    {
+        var parts = pathLike.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        // Typical structure: .../<SaveDataId:x16>/0/main
+        for (var i = parts.Length - 2; i >= 0; i--)
+        {
+            if (parts[i].Length == 16 && ulong.TryParse(parts[i], System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var saveId))
+            {
+                if (imkvdbMap.TryGetValue(saveId, out var programId))
+                {
+                    var guessed = EmulatorSaveHeuristics.GuessSwitchGameLabel("/" + programId.ToString("X16") + "/main");
+                    if (guessed != "Switch save") return guessed;
+                }
+            }
+        }
+
+        return EmulatorSaveHeuristics.GuessSwitchGameLabel(pathLike);
+    }
 
     private List<DetectedSave> ScanThreeDs(TNode root, EmulatorKind kind,
         CancellationToken cancellationToken, ScanState state, Action<DetectedSave>? onSave)

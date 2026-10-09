@@ -33,13 +33,21 @@ internal static class SramPadding
 
     /// <summary>
     /// mGBA stores a real-time-clock cartridge's RTC state as 16 bytes appended to the flash
-    /// dump (Unbound, Emerald and Ruby/Sapphire carry an RTC). Unlike padding it is live
-    /// data, so it is dropped for parsing and handed back verbatim on write.
+    /// dump (Unbound, Emerald and Ruby/Sapphire carry an RTC). Game Boy MBC3 emulators (and SameBoy)
+    /// append 48 bytes to SRAM. Unlike padding it is live data, so it is dropped for parsing
+    /// and handed back verbatim on write.
     /// </summary>
-    private const int RtcFooterLength = 16;
+    private const int GbaRtcFooterLength = 16;
+    private const int GbRtcFooterLength = 48;
 
-    private static bool IsRtcFooter(int fileLength) =>
-        fileLength - RtcFooterLength is 0x20000 or 0x10000;
+    private static int GetRtcFooterLength(int fileLength)
+    {
+        if (fileLength - GbaRtcFooterLength is 0x20000 or 0x10000)
+            return GbaRtcFooterLength;
+        if (fileLength - GbRtcFooterLength is 0x8000 or 0x2000)
+            return GbRtcFooterLength;
+        return 0;
+    }
 
     /// <summary>
     /// How many trailing bytes an oversized dump carries beyond its chip, or 0 when the
@@ -51,7 +59,8 @@ internal static class SramPadding
         // An exact chip size means the dump is the chip: nothing was appended, and a
         // smaller chip must never be inferred from an erased tail.
         if (Array.IndexOf(ChipSizes, original.Length) >= 0) return 0;
-        if (IsRtcFooter(original.Length)) return RtcFooterLength;
+        var rtcLen = GetRtcFooterLength(original.Length);
+        if (rtcLen > 0) return rtcLen;
 
         foreach (var size in ChipSizes)
         {
@@ -79,7 +88,8 @@ internal static class SramPadding
     {
         if (payload.Length >= original.Length) return payload.ToArray(); // nothing was dropped
         var dropped = original[payload.Length..];
-        var rtcFooter = dropped.Length == RtcFooterLength && IsRtcFooter(original.Length);
+        var rtcLen = GetRtcFooterLength(original.Length);
+        var rtcFooter = rtcLen > 0 && dropped.Length == rtcLen;
         if (!rtcFooter && !IsUniformPad(dropped)) return payload.ToArray(); // not ours to re-append
         if (payload.SequenceEqual(original[..payload.Length])) return original.ToArray();
 

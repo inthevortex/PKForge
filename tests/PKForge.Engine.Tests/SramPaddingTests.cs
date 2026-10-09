@@ -187,6 +187,24 @@ public sealed class SramPaddingTests
         Assert.True(written.AsSpan(0x20000).SequenceEqual(file.AsSpan(0x20000)), "the RTC footer must survive an edit");
     }
 
+    /// <summary>SameBoy and GB emulators append a 48-byte MBC3 RTC state to 32 KB SRAM (Crystal, Gold, Silver):
+    /// live data, not padding. It is dropped for parsing and comes back byte for byte.</summary>
+    [Fact]
+    public void GbMbc3RtcFooterIsDroppedForParsingAndKeptOnWrite()
+    {
+        var file = new byte[0x8000 + 48];
+        Random.Shared.NextBytes(file);
+        var payload = SramPadding.Trim(file);
+        Assert.Equal(0x8000, payload.Length);
+
+        Assert.True(SramPadding.Pad(payload, file).AsSpan().SequenceEqual(file), "an unedited save must round trip");
+
+        payload[7] ^= 0xFF;
+        var written = SramPadding.Pad(payload, file);
+        Assert.Equal(file.Length, written.Length);
+        Assert.True(written.AsSpan(0x8000).SequenceEqual(file.AsSpan(0x8000)), "the GB RTC footer must survive an edit");
+    }
+
     /// <summary>Field report: an Unbound save exported by mGBA (RTC footer) was listed as
     /// Unbound but refused to open ("These bytes are not a Pokémon Unbound save").</summary>
     [Fact]

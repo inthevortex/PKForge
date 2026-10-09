@@ -9,4 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\PKForge.Domain\PKForge.Domain.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="PKForge.Engine.Tests" />
+  </ItemGroup>
 </Project>

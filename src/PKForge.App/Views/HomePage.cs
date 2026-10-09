@@ -14,6 +14,7 @@ public sealed class HomePage : ContentPage, IPadHandler
 {
     private readonly SavePickerViewModel _viewModel;
     private readonly IAppPlatform _appPlatform;
+    private readonly IEmulatorRootDiscovery _discovery;
     private ScrollView _shelf = null!;
     private HorizontalStackLayout _shelfItems = null!;
     private int _shelfIndex = -1;
@@ -23,11 +24,13 @@ public sealed class HomePage : ContentPage, IPadHandler
     private PokeparkPage? _parkPage;
     private int _parkNavigationPending;
 
-    public HomePage(SavePickerViewModel viewModel, IAppPlatform? appPlatform = null)
+    public HomePage(SavePickerViewModel viewModel, IAppPlatform? appPlatform = null, IEmulatorRootDiscovery? discovery = null)
     {
         _viewModel = viewModel;
         _appPlatform = appPlatform ?? IPlatformApplication.Current?.Services.GetRequiredService<IAppPlatform>()
             ?? throw new InvalidOperationException("IAppPlatform is unavailable.");
+        _discovery = discovery ?? IPlatformApplication.Current?.Services.GetService<IEmulatorRootDiscovery>()
+            ?? NullEmulatorRootDiscovery.Instance;
         BindingContext = viewModel;
         Title = "PKForge";
         BackgroundColor = UiTokens.Housing;
@@ -521,21 +524,116 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// <summary>Saves whose edition the player chose to decide later: not asked again this session.</summary>
     private readonly HashSet<string> _editionDeferred = new(StringComparer.Ordinal);
 
+    private static string IconForKind(EmulatorKind kind) => kind switch
+    {
+        EmulatorKind.RetroArch => "retroarch",
+        EmulatorKind.MelonDS => "melonds",
+        EmulatorKind.Azahar or EmulatorKind.CitraMmj => "azahar",
+        EmulatorKind.Eden or EmulatorKind.Ryujinx => "eden",
+        EmulatorKind.Dolphin => "dolphin",
+        _ => "folder",
+    };
+
     /// <summary>Platform folders keep emulator choices together for touch and controller use.</summary>
     private async Task ShowLinkMenuAsync()
     {
         while (true)
         {
-            var platform = await PadMenu.ShowAsync(_hostGrid, "Link a storage unit", "Choose a platform to see its emulators.",
-                new PadOption("Game Boy / Game Boy Color", IconPath: "platform-gb"),
-                new PadOption("Game Boy Advance", IconPath: "platform-gba"),
-                new PadOption("Nintendo DS", IconPath: "platform-ds"),
-                new PadOption("GameCube", IconPath: "platform-gc"),
-                new PadOption("Nintendo 3DS", IconPath: "azahar"),
-                new PadOption("Nintendo Switch", IconPath: "eden"),
-                new PadOption("Single save file", IconPath: "file"));
+            var discovered = await _discovery.DiscoverRootsAsync();
+            var unlinked = discovered.Where(r => !_viewModel.IsRootWatched(r.TreeId)).ToList();
+
+            var menuOptions = new List<PadOption>();
+            if (unlinked.Count > 0)
+            {
+                menuOptions.Add(new PadOption($"Found emulators ({unlinked.Count} found)", IconPath: "folder"));
+            }
+
+            menuOptions.Add(new PadOption("Game Boy / Game Boy Color", IconPath: "platform-gb"));
+            menuOptions.Add(new PadOption("Game Boy Advance", IconPath: "platform-gba"));
+            menuOptions.Add(new PadOption("Nintendo DS", IconPath: "platform-ds"));
+            menuOptions.Add(new PadOption("GameCube", IconPath: "platform-gc"));
+            menuOptions.Add(new PadOption("Nintendo 3DS", IconPath: "azahar"));
+            menuOptions.Add(new PadOption("Nintendo Switch", IconPath: "eden"));
+#if PKFORGE_DESKTOP
+            menuOptions.Add(new PadOption("ROM folder", IconPath: "folder"));
+#endif
+            menuOptions.Add(new PadOption("Single save file", IconPath: "file"));
+
+            var platform = await PadMenu.ShowAsync(_hostGrid, "Link a storage unit", "Choose a platform to see its emulators.", [.. menuOptions]);
             if (platform is null) return;
+
+            if (platform.StartsWith("Found emulators", StringComparison.Ordinal))
+            {
+                var subOptions = new List<PadOption>
+                {
+                    new($"Link all ({unlinked.Count})", IconPath: "folder")
+                };
+                foreach (var r in unlinked)
+                {
+                    subOptions.Add(new($"{r.DisplayName} · {r.SourceName}", Detail: r.TreeId, IconPath: IconForKind(r.Kind)));
+                }
+                subOptions.Add(new("Back", IconPath: "back"));
+
+                var discoveredChoice = await PadMenu.ShowAsync(_hostGrid, "Found emulators",
+                    "PKForge detected the following emulator or ROM storage folders on this machine.",
+                    [.. subOptions]);
+                if (discoveredChoice is null || discoveredChoice == "Back") continue;
+                if (discoveredChoice.StartsWith("Link all", StringComparison.Ordinal))
+                {
+                    await _viewModel.AddDiscoveredRootsAsync(unlinked);
+                    return;
+                }
+                var selected = unlinked.FirstOrDefault(r => $"{r.DisplayName} · {r.SourceName}" == discoveredChoice);
+                if (selected is not null)
+                {
+                    await _viewModel.AddDiscoveredRootAsync(selected);
+                    return;
+                }
+                continue;
+            }
+
             if (platform == "Single save file") { await LinkFileAsync(); return; }
+#if PKFORGE_DESKTOP
+            if (platform == "ROM folder")
+            {
+                await _viewModel.AddRomFolderCommand.ExecuteAsync(null);
+                return;
+            }
+#endif
+
+#if PKFORGE_DESKTOP
+            var options = platform switch
+            {
+                "Game Boy / Game Boy Color" => new[]
+                {
+                    new PadOption("RetroArch", IconPath: "retroarch"),
+                    new PadOption("mGBA", IconPath: "platform-gba"),
+                    new PadOption("ROM folder", IconPath: "folder"),
+                },
+                "Game Boy Advance" => new[]
+                {
+                    new PadOption("mGBA", IconPath: "platform-gba"),
+                    new PadOption("RetroArch", IconPath: "retroarch"),
+                    new PadOption("ROM folder", IconPath: "folder"),
+                },
+                "Nintendo DS" => new[]
+                {
+                    new PadOption("melonDS", IconPath: "melonds"),
+                    new PadOption("RetroArch", IconPath: "retroarch"),
+                    new PadOption("ROM folder", IconPath: "folder"),
+                },
+                "GameCube" => new[] { new PadOption("Dolphin", IconPath: "dolphin") },
+                "Nintendo 3DS" => new[]
+                {
+                    new PadOption("Azahar / Lime3DS", IconPath: "azahar"),
+                },
+                _ => new[]
+                {
+                    new PadOption("Ryujinx", IconPath: "eden"),
+                    new PadOption("Eden", IconPath: "eden"),
+                },
+            };
+#else
             var options = platform switch
             {
                 "Game Boy / Game Boy Color" => new[]
@@ -564,6 +662,7 @@ public sealed class HomePage : ContentPage, IPadHandler
                 },
                 _ => new[] { new PadOption("Eden", IconPath: "eden") },
             };
+#endif
             var choice = await PadMenu.ShowAsync(_hostGrid, platform, null, options);
             if (choice is null) continue;
             var guidance = choice switch
@@ -574,11 +673,19 @@ public sealed class HomePage : ContentPage, IPadHandler
                 "Azahar / Lime3DS" => "Save in game and close the emulator. Select the user folder you chose in its setup (the one containing sdmc); sdmc, Nintendo 3DS or a folder above the user folder also work. Restart the game normally after editing.",
                 "Citra MMJ" => "Save in game and close Citra MMJ. In the file picker open the Citra MMJ entry (or Android/data/org.citra.emu/files) and select citra-emu, or /citra-emu on older Android. Restart the game normally after editing.",
                 "Eden" => "Save in game and close the emulator. Select its files root containing the emulated storage. Restart the game normally after editing.",
+                "Ryujinx" => "Save in game and close Ryujinx. Select Ryujinx's save folder (bis/user/save) or user directory (~/.config/Ryujinx). Restart the game normally after editing.",
+                "mGBA" => "Save in game and close mGBA. Select your mGBA save directory or the folder containing your GBA ROMs and .sav battery saves. Restart the game normally after editing.",
+                "ROM folder" => "Select the folder containing your Pokémon ROMs and .sav files. Subdirectories will be scanned automatically.",
                 "melonDS" => "Save in game and close melonDS. Select the folder containing your .sav battery saves: next to your ROMs by default, or the save folder set in melonDS's settings. Save states are not supported. Restart the game normally after editing.",
                 _ => "Save in game and close the emulator. Select its saves folder (or the folder containing your battery saves). Save states are not supported. Restart the game normally after editing.",
             };
+#if ANDROID
+            var promptMessage = guidance + " If Android does not offer access to the folder, use Single save file with an exported save.";
+#else
+            var promptMessage = guidance;
+#endif
             var proceed = await PadMenu.ShowAsync(_hostGrid, $"Link {choice}",
-                guidance + " If Android does not offer access to the folder, use Single save file with an exported save.",
+                promptMessage,
                 new PadOption("Choose folder", IconPath: "folder"), new PadOption("Back", IconPath: "back"));
             if (proceed != "Choose folder") continue;
             switch (choice)
@@ -589,6 +696,9 @@ public sealed class HomePage : ContentPage, IPadHandler
                 case "Azahar / Lime3DS": await _viewModel.AddAzaharCommand.ExecuteAsync(null); break;
                 case "Citra MMJ": await _viewModel.AddCitraMmjCommand.ExecuteAsync(null); break;
                 case "Eden": await _viewModel.AddEdenCommand.ExecuteAsync(null); break;
+                case "Ryujinx": await _viewModel.AddRyujinxCommand.ExecuteAsync(null); break;
+                case "mGBA": await _viewModel.AddMgbaCommand.ExecuteAsync(null); break;
+                case "ROM folder": await _viewModel.AddRomFolderCommand.ExecuteAsync(null); break;
                 case "Dolphin": await _viewModel.AddDolphinCommand.ExecuteAsync(null); break;
                 case "DraStic": await _viewModel.AddDraSticCommand.ExecuteAsync(null); break;
                 case "Pizza Boy A (GBA)": await _viewModel.AddPizzaBoyGbaCommand.ExecuteAsync(null); break;

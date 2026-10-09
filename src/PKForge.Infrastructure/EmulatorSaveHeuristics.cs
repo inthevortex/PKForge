@@ -97,7 +97,7 @@ public static class EmulatorSaveHeuristics
 
     /// <summary>NAND/SD-structured saves are the corruption-prone write path and get extra confirmation.</summary>
     public static bool RequiresExtraCare(EmulatorKind kind) =>
-        kind is EmulatorKind.Azahar or EmulatorKind.CitraMmj or EmulatorKind.Eden;
+        kind is EmulatorKind.Azahar or EmulatorKind.CitraMmj or EmulatorKind.Eden or EmulatorKind.Ryujinx;
 
     /// <summary>Newest-first, deduplicated by document id (Eden roots and pinned files can overlap).</summary>
     public static List<DetectedSave> Normalize(IEnumerable<DetectedSave> saves)

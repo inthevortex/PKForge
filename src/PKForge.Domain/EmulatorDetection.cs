@@ -14,6 +14,9 @@ public enum EmulatorKind
     PizzaBoyGbc = 8,
     /// <summary>Citra MMJ (weihuoya fork, org.citra.emu): same SDMC layout as Azahar, rooted at citra-emu/.</summary>
     CitraMmj = 9,
+    Ryujinx = 10,
+    RomFolder = 11,
+    MGba = 12,
 }
 
 /// <summary>A persistable SAF folder grant, opaque to the domain layer.</summary>
