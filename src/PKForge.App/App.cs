@@ -12,8 +12,8 @@ public sealed class App : Application
         base.OnSleep();
     }
 
-    private static Platforms.Android.MusicPlayer? Music =>
-        IPlatformApplication.Current?.Services.GetService<Domain.IMusicPlayer>() as Platforms.Android.MusicPlayer;
+    private static Domain.IMusicPlayer? Music =>
+        IPlatformApplication.Current?.Services.GetService<Domain.IMusicPlayer>();
 
     /// <summary>The user's optional default background music starts with the app, once.</summary>
     protected override void OnStart()
@@ -55,6 +55,8 @@ public sealed class App : Application
     {
 #if ANDROID
         Android.Util.Log.Info("PKForgeBoot", message);
+#else
+        Console.WriteLine($"[PKForgeBoot] {message}");
 #endif
     }
 
@@ -100,7 +102,15 @@ public sealed class App : Application
         {
             var services = IPlatformApplication.Current?.Services
                 ?? throw new InvalidOperationException("MAUI services are unavailable.");
-            return new Window(CreateRoot(services));
+            var root = CreateRoot(services);
+            return new Window(root)
+            {
+                Title = "PKForge",
+#if PKFORGE_DESKTOP
+                Width = 1920,
+                Height = 1080,
+#endif
+            };
         }
         catch (Exception error)
         {
@@ -117,7 +127,14 @@ public sealed class App : Application
                         Margin = new Thickness(20),
                     },
                 },
-            });
+            })
+            {
+                Title = "PKForge Error",
+#if PKFORGE_DESKTOP
+                Width = 1280,
+                Height = 800,
+#endif
+            };
         }
     }
 }

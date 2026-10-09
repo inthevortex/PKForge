@@ -31,4 +31,13 @@ public interface IMusicPlayer
     /// <summary>Makes the current library the app's default startup music (or forgets it).</summary>
     void SetAutostart(bool on);
     bool Autostart { get; }
+
+    /// <summary>Starts playback at app launch when the user asked for it.</summary>
+    void MaybeAutostart();
+    /// <summary>The app left the screen (Home, another app): music stops with it.</summary>
+    void PauseForBackground();
+    /// <summary>The app is back: music paused by PauseForBackground carries on.</summary>
+    void ResumeFromBackground();
+    /// <summary>Set when playback fails; the UI shows it so failures are never silent.</summary>
+    string? LastError { get; }
 }

@@ -1,18 +1,25 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0-android</TargetFramework>
+    <TargetFrameworks>net11.0-android;net11.0</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <RootNamespace>PKForge.App</RootNamespace>
-    <UseMaui>true</UseMaui>
-    <SingleProject>true</SingleProject>
+    <UseMaui Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">true</UseMaui>
+    <SingleProject Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">true</SingleProject>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Suppress CS0618 (obsolete warnings from SkiaSharp 4 SKPath methods and MAUI Application.MainPage) -->
+    <NoWarn>$(NoWarn);CS0618</NoWarn>
     <ApplicationId>org.pkforge.app</ApplicationId>
     <ApplicationTitle>PKForge</ApplicationTitle>
     <ApplicationVersion>310</ApplicationVersion>
     <ApplicationDisplayVersion>3.1.0</ApplicationDisplayVersion>
-    <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifiers Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">android-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net11.0'">
+    <AssemblyName>PKForge</AssemblyName>
+    <DefineConstants>$(DefineConstants);PKFORGE_DESKTOP</DefineConstants>
+    <AvaloniaControlsMauiGenerateDesktopProgram>false</AvaloniaControlsMauiGenerateDesktopProgram>
   </PropertyGroup>
   <PropertyGroup Condition="'$(DiagnosticBuild)' == 'true'">
     <!-- Diagnostic builds install beside production and cannot overwrite its app-private data. -->
@@ -27,14 +34,33 @@
          APK entries are stored, never ZIP-compressed. -->
     <AndroidStoreUncompressedFileExtensions>.so;$(AndroidStoreUncompressedFileExtensions)</AndroidStoreUncompressedFileExtensions>
   </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.20" />
+
+  <!-- Package references per target framework -->
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <PackageReference Include="Microsoft.Maui.Controls" Version="11.0.0-rc.1.26451.6" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
-    <PackageReference Include="SkiaSharp.Views.Maui.Controls" Version="3.116.1" />
+    <PackageReference Include="SkiaSharp.Views.Maui.Controls" Version="4.151.0" />
     <PackageReference Include="ZXing.Net" Version="0.16.10" />
   </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net11.0'">
+    <PackageReference Include="Avalonia.Controls.Maui" Version="11.0.0-rc.1.26252.343" />
+    <PackageReference Include="Avalonia.Controls.Maui.Desktop" Version="11.0.0-rc.1.26252.343" />
+    <PackageReference Include="Avalonia.Controls.Maui.Essentials" Version="11.0.0-rc.1.26252.343" />
+    <PackageReference Include="Avalonia.Controls.Maui.SkiaSharp.Views" Version="11.0.0-rc.1.26252.343" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="ZXing.Net" Version="0.16.10" />
+  </ItemGroup>
+
+  <!-- Platform source file separation -->
   <ItemGroup>
+    <Compile Remove="Platforms/Desktop/**" Condition="'$(TargetFramework)' != 'net11.0'" />
+    <Compile Remove="Platforms/Android/**" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != 'android'" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
     <AndroidLinkDescription Include="Platforms/Android/linker.xml" />
+  </ItemGroup>
+  <ItemGroup>
     <MauiIcon Include="Resources/AppIcon/pkforge.png" Color="#14121D" />
     <MauiSplashScreen Include="Resources/Splash/splash.png" Color="#14121D" BaseSize="180,180" />
     <MauiFont Include="Resources/Fonts/*.ttf" />
@@ -91,4 +117,8 @@
     <ProjectReference Include="../PKForge.Engine/PKForge.Engine.csproj" />
     <ProjectReference Include="../PKForge.Infrastructure/PKForge.Infrastructure.csproj" />
   </ItemGroup>
+
+  <!-- Hook MauiAsset conversion before AddAvaloniaResources on desktop so embedded resources are registered -->
+  <Target Name="HookMauiAssetsToAvalonia" BeforeTargets="AddAvaloniaResources" DependsOnTargets="ConvertMauiAssetsToAvaloniaResources" Condition="'$(TargetFramework)' == 'net11.0'" />
+
 </Project>

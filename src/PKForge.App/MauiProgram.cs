@@ -6,7 +6,12 @@ using PKForge.App.Views;
 using PKForge.Domain;
 using PKForge.Engine;
 using PKForge.Infrastructure;
+#if ANDROID
 using SkiaSharp.Views.Maui.Controls.Hosting;
+#elif PKFORGE_DESKTOP
+using Avalonia.Controls.Maui;
+using SkiaSharp.Views.Maui.Controls.Hosting;
+#endif
 
 namespace PKForge.App;
 
@@ -21,7 +26,14 @@ public static class MauiProgram
 #if ANDROID
         Views.CapsuleSkin.Register();
 #endif
-        builder.UseMauiApp<App>().UseSkiaSharp()
+        builder.UseMauiApp<App>()
+#if ANDROID
+            .UseSkiaSharp()
+#elif PKFORGE_DESKTOP
+            .UseAvaloniaApp()
+            .UseAvaloniaEssentials()
+            .UseAvaloniaSkiaSharp()
+#endif
             .ConfigureFonts(fonts =>
             {
                 fonts.AddFont("MPLUSRounded1c-Regular.ttf", "Rounded");
@@ -92,6 +104,15 @@ public static class MauiProgram
         builder.Services.AddSingleton<IFolderPicker, AndroidFolderPicker>();
         builder.Services.AddSingleton<IFolderFileAccess, AndroidFolderFileAccess>();
         builder.Services.AddSingleton<IEmulatorDetectionService, AndroidEmulatorScanner>();
+#elif PKFORGE_DESKTOP
+        builder.Services.AddSingleton<ISaveFileAccess, Platforms.Desktop.PosixSaveFileAccess>();
+        builder.Services.AddSingleton<IMusicPlayer, Platforms.Desktop.DesktopMusicPlayer>();
+        builder.Services.AddSingleton<IDocumentPicker, Platforms.Desktop.DesktopDocumentPicker>();
+        builder.Services.AddSingleton<ISecondaryDisplayHost, Platforms.Desktop.NullSecondaryDisplayHost>();
+        builder.Services.AddSingleton<IFolderPicker, Platforms.Desktop.DesktopFolderPicker>();
+        builder.Services.AddSingleton<IFolderFileAccess, Platforms.Desktop.PosixFolderFileAccess>();
+        builder.Services.AddSingleton<IEmulatorDetectionService, Platforms.Desktop.DesktopEmulatorScanner>();
+
 #endif
         builder.Services.AddSingleton<IWatchedRootStore, PreferencesWatchedRootStore>();
         builder.Services.AddSingleton<BoxBrowserViewModel>();

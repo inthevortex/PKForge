@@ -20,7 +20,19 @@ public static class AppLog
     private static readonly Queue<string> Tail = new();
     private static bool _installed;
 
-    private static string Folder => Path.Combine(FileSystem.AppDataDirectory, "logs");
+    private static string AppDataDir
+    {
+        get
+        {
+            try { return FileSystem.AppDataDirectory; }
+            catch (Exception)
+            {
+                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PKForge");
+            }
+        }
+    }
+
+    private static string Folder => Path.Combine(AppDataDir, "logs");
     private static string CurrentLog => Path.Combine(Folder, "pkforge.log");
     private static string PreviousLog => Path.Combine(Folder, "pkforge.previous.log");
 
@@ -163,7 +175,10 @@ public static class AppLog
 #if ANDROID
         return $"PKForge {AppInfo.Current.VersionString} ({AppInfo.Current.BuildString}) · {Android.OS.Build.Manufacturer} {Android.OS.Build.Model} · Android {Android.OS.Build.VERSION.Release} (API {(int)Android.OS.Build.VERSION.SdkInt})";
 #else
-        return $"PKForge {AppInfo.Current.VersionString}";
+        string version;
+        try { version = AppInfo.Current.VersionString; }
+        catch { version = typeof(AppLog).Assembly.GetName().Version?.ToString(3) ?? "3.1.0"; }
+        return $"PKForge {version} · Linux ({Environment.OSVersion})";
 #endif
     }
 

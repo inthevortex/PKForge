@@ -1,6 +1,8 @@
 using System.Text.Json;
+#if ANDROID
 using Android.App;
 using Android.Content.PM;
+#endif
 using PKForge.Domain;
 
 #if ANDROID
@@ -25,7 +27,12 @@ public sealed class AppUpdateService
 
     public string SkippedVersion => Preferences.Default.Get(SkippedVersionKey, "");
 
+#if ANDROID
     public static bool CanInstallUpdates() => CanRequestInstalls();
+#else
+    public static bool CanInstallUpdates() => false;
+    public static void OpenInstallPermissionSettings() { }
+#endif
 
     public async Task<AppUpdateCheck> CheckAsync(CancellationToken cancellationToken = default)
     {
