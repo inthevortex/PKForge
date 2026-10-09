@@ -5,8 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- SkiaSharp 4 marks direct SKPath mutation obsolete in favor of SKPathBuilder.
+         Suppress CS0618 so TreatWarningsAsErrors allows building existing path code. -->
+    <NoWarn>$(NoWarn);CS0618</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="SkiaSharp" Version="3.116.1" />
+    <PackageReference Include="SkiaSharp" Version="4.151.0" />
   </ItemGroup>
 </Project>
