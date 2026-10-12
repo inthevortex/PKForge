@@ -1126,7 +1126,11 @@ public sealed class HomePage : ContentPage, IPadHandler
             new PadOption($"Download full sprite pack ({SpritePackDownloader.SizeHint})", IconPath: "download", Detail: "Animated sprites, HOME pictures and item icons, to use offline."),
             new PadOption("Rescan games", IconPath: "refresh", Detail: "Look through your linked folders for saves again."),
             new PadOption("Scan report", IconPath: "report", Detail: "What the last scan found in each folder, to copy and send us."),
+#if PKFORGE_DESKTOP
+            new PadOption("Export logs", IconPath: "export", Detail: "Crash reports and recent activity, to save or send when something goes wrong."),
+#else
             new PadOption("Share logs", IconPath: "export", Detail: "Crash reports and recent activity, to send us when something goes wrong."),
+#endif
             new PadOption(SecondScreenMode.UserOff ? "Second screen: OFF" : "Second screen: ON", IconPath: "compact",
                 Detail: "OFF keeps PKForge on one screen, so the other stays free (an emulator, say)."),
             new PadOption(Services.HaXMode.IsOn ? "HaX mode: ON" : "HaX mode: OFF", IconPath: "hax",
@@ -1154,7 +1158,7 @@ public sealed class HomePage : ContentPage, IPadHandler
                 // Called directly: the command refuses to start while an older run it owns is still pending.
                 await _viewModel.RescanAsync();
                 break;
-            case "Share logs":
+            case "Share logs" or "Export logs":
                 await ShareLogsAsync();
                 break;
             case "Second screen: ON" or "Second screen: OFF":
@@ -1239,11 +1243,17 @@ public sealed class HomePage : ContentPage, IPadHandler
     private async Task OfferCrashReportAsync()
     {
         if (AppLog.UnseenCrashes().Count == 0) return;
+        var action =
+#if PKFORGE_DESKTOP
+            "Export report";
+#else
+            "Share report";
+#endif
         var choice = await PadMenu.ShowAsync(_hostGrid, "PKForge closed unexpectedly",
             "A crash report was saved. Sharing it helps us fix it: it holds the error, your recent activity, file names and your device model, never your save data.",
-            "Share report", "Not now");
+            action, "Not now");
         AppLog.MarkCrashesSeen();
-        if (choice == "Share report") await ShareLogsAsync();
+        if (choice == action) await ShareLogsAsync();
     }
 
     /// <summary>Downloads every species' animated + HOME sprites for full offline use.</summary>

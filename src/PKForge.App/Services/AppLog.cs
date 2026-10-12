@@ -72,6 +72,25 @@ public static class AppLog
         };
         var previous = Java.Lang.Thread.DefaultUncaughtExceptionHandler;
         Java.Lang.Thread.DefaultUncaughtExceptionHandler = new JavaCrashHandler(previous);
+#elif PKFORGE_DESKTOP
+        try
+        {
+            Avalonia.Threading.Dispatcher.UIThread.UnhandledException += (_, args) =>
+            {
+                if (args.Exception is ObjectDisposedException { ObjectName: "IServiceProvider" } disposed
+                    && disposed.StackTrace?.Contains("Microsoft.Maui.TaskExtensions", StringComparison.Ordinal) == true)
+                {
+                    Warn("app", "An image finished loading after its window closed");
+                    args.Handled = true;
+                    return;
+                }
+                WriteCrash("Unhandled exception on the Avalonia UI thread", args.Exception, null);
+            };
+        }
+        catch (Exception ex)
+        {
+            Warn("app", $"Could not hook Avalonia Dispatcher: {ex.Message}");
+        }
 #endif
         Info("app", $"Started · {DeviceSummary()}");
     }
@@ -128,6 +147,8 @@ public static class AppLog
 #if ANDROID
         if (level == "ERROR") Android.Util.Log.Error("PKForge", line);
         else Android.Util.Log.Info("PKForge", line);
+#elif PKFORGE_DESKTOP
+        Console.Error.WriteLine(line);
 #endif
         lock (Gate)
         {
@@ -178,7 +199,10 @@ public static class AppLog
         string version;
         try { version = AppInfo.Current.VersionString; }
         catch { version = typeof(AppLog).Assembly.GetName().Version?.ToString(3) ?? "3.1.0"; }
-        return $"PKForge {version} · Linux ({Environment.OSVersion})";
+        var os = ReadOsReleasePrettyName() ?? Environment.OSVersion.ToString();
+        var product = ReadFileOrNull("/sys/class/dmi/id/product_name")?.Trim();
+        var hardware = !string.IsNullOrEmpty(product) ? $" · {product}" : "";
+        return $"PKForge {version} · {os}{hardware}";
 #endif
     }
 
@@ -200,8 +224,94 @@ public static class AppLog
         {
             text.AppendLine($"(device details unavailable: {error.Message})");
         }
+#elif PKFORGE_DESKTOP
+        try
+        {
+            var kernel = ReadFileOrNull("/proc/sys/kernel/osrelease")?.Trim();
+            if (!string.IsNullOrEmpty(kernel))
+                text.AppendLine($"Kernel: {kernel}");
+
+            var vendor = ReadFileOrNull("/sys/class/dmi/id/sys_vendor")?.Trim();
+            var product = ReadFileOrNull("/sys/class/dmi/id/product_name")?.Trim();
+            if (!string.IsNullOrEmpty(vendor) || !string.IsNullOrEmpty(product))
+                text.AppendLine($"Hardware: {vendor} {product}".Trim());
+
+            try
+            {
+                if (Directory.Exists("/sys/class/drm"))
+                {
+                    foreach (var cardDir in Directory.EnumerateDirectories("/sys/class/drm", "card[0-9]*"))
+                    {
+                        var uevent = ReadFileOrNull(Path.Combine(cardDir, "device", "uevent"));
+                        if (uevent != null)
+                        {
+                            var driver = uevent.Split('\n').FirstOrDefault(l => l.StartsWith("DRIVER=", StringComparison.OrdinalIgnoreCase))?.Trim();
+                            var pciId = uevent.Split('\n').FirstOrDefault(l => l.StartsWith("PCI_ID=", StringComparison.OrdinalIgnoreCase))?.Trim();
+                            text.AppendLine($"GPU ({Path.GetFileName(cardDir)}): {driver} {pciId}".Trim());
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            var session = Environment.GetEnvironmentVariable("XDG_SESSION_TYPE");
+            var desktop = Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP");
+            text.AppendLine($"Session: {session} ({desktop})");
+
+            var gamescope = Environment.GetEnvironmentVariable("GAMESCOPE_WAYLAND_DISPLAY");
+            var steamDeck = Environment.GetEnvironmentVariable("SteamDeck");
+            if (!string.IsNullOrEmpty(gamescope) || !string.IsNullOrEmpty(steamDeck))
+            {
+                text.AppendLine($"Gamescope/Deck: gamescope={gamescope}, SteamDeck={steamDeck}");
+            }
+
+            try
+            {
+                if (Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktopLifetime
+                    && desktopLifetime.MainWindow?.Screens is { } screens)
+                {
+                    int i = 0;
+                    foreach (var screen in screens.All)
+                    {
+                        text.AppendLine($"Display {i++}: {screen.Bounds.Width}x{screen.Bounds.Height} @ {screen.Scaling:0.##}x (Primary: {screen.IsPrimary})");
+                    }
+                }
+            }
+            catch { }
+        }
+        catch (Exception error)
+        {
+            text.AppendLine($"(desktop details unavailable: {error.Message})");
+        }
 #endif
         return text.ToString();
+    }
+
+    private static string? ReadFileOrNull(string path)
+    {
+        try { return File.Exists(path) ? File.ReadAllText(path) : null; }
+        catch { return null; }
+    }
+
+    private static string? ReadOsReleasePrettyName()
+    {
+        try
+        {
+            var content = ReadFileOrNull("/etc/os-release") ?? ReadFileOrNull("/usr/lib/os-release");
+            if (content == null) return null;
+            foreach (var line in content.Split('\n'))
+            {
+                if (line.StartsWith("PRETTY_NAME=", StringComparison.Ordinal))
+                    return line["PRETTY_NAME=".Length..].Trim().Trim('"');
+            }
+            foreach (var line in content.Split('\n'))
+            {
+                if (line.StartsWith("NAME=", StringComparison.Ordinal))
+                    return line["NAME=".Length..].Trim().Trim('"');
+            }
+        }
+        catch { }
+        return null;
     }
 
     private static void TryIo(Action action)

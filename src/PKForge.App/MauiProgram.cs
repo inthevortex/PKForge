@@ -91,6 +91,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<GamepadRouter>();
         builder.Services.AddSingleton<SecondScreenState>();
         builder.Services.AddSingleton<SpritePackDownloader>();
+        builder.Services.AddSingleton<UpdateChecker>();
         builder.Services.AddSingleton<AppUpdateService>();
         builder.Services.AddSingleton<TransferService>();
 #if ANDROID
@@ -111,6 +112,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IIncrementalEmulatorDetectionService>(sp => sp.GetRequiredService<AndroidEmulatorScanner>());
         builder.Services.AddSingleton<IEmulatorRootDiscovery, NullEmulatorRootDiscovery>();
         builder.Services.AddSingleton<IAppPlatform, Platforms.Android.AndroidAppPlatform>();
+        builder.Services.AddSingleton<IUpdateInstaller, Platforms.Android.AndroidUpdateInstaller>();
 #elif PKFORGE_DESKTOP
         builder.Services.AddSingleton<PadInputPump>(sp => new PadInputPump(
             sp.GetRequiredService<GamepadRouter>(),
@@ -128,6 +130,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IIncrementalEmulatorDetectionService>(sp => sp.GetRequiredService<Platforms.Desktop.DesktopEmulatorScanner>());
         builder.Services.AddSingleton<IEmulatorRootDiscovery, LinuxEmulatorRootDiscovery>();
         builder.Services.AddSingleton<IAppPlatform, Platforms.Desktop.DesktopAppPlatform>();
+        builder.Services.AddSingleton<IUpdateInstaller, Platforms.Desktop.DesktopUpdateInstaller>();
 
         var desktopDisplay = new Platforms.Desktop.DesktopDeviceDisplay();
         builder.Services.AddSingleton<Microsoft.Maui.Devices.IDeviceDisplay>(desktopDisplay);

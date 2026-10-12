@@ -16,7 +16,11 @@
     <ApplicationVersion>310</ApplicationVersion>
     <ApplicationDisplayVersion>3.1.0</ApplicationDisplayVersion>
     <RuntimeIdentifiers Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">android-arm64</RuntimeIdentifiers>
+    <PKForgeUpdateRepository Condition="'$(PKForgeUpdateRepository)' == ''">sofianeelhor/PKForge</PKForgeUpdateRepository>
   </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="PKForgeUpdateRepository" Value="$(PKForgeUpdateRepository)" />
+  </ItemGroup>
   <PropertyGroup Condition="'$(TargetFramework)' == 'net11.0'">
     <AssemblyName>PKForge</AssemblyName>
     <DefineConstants>$(DefineConstants);PKFORGE_DESKTOP</DefineConstants>
