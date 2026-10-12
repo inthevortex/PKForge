@@ -29,6 +29,7 @@ internal sealed class TouchScroller
     private float _startOffset;
     private float _grab;
     private bool _dragging;
+    private bool _active;
     private readonly List<(long Ms, float Y)> _trail = [];
     private IDispatcherTimer? _fling;
     private IDispatcherTimer? _fade;
@@ -97,13 +98,25 @@ internal sealed class TouchScroller
 
     public void Stop() => _fling?.Stop();
 
+    /// <summary>Scrolls by mouse wheel delta, unclamped movement clamped to max scroll.</summary>
+    public void HandleWheel(float delta)
+    {
+        Stop();
+        Touched();
+        _scrollTo(Math.Clamp(_offset() - delta, 0, _max()));
+    }
+
     /// <summary>Feeds one touch event; returns the point of a tap (a press released without dragging).</summary>
-    public SKPoint? Handle(SKTouchAction action, SKPoint point)
+    public SKPoint? Handle(SKTouchAction action, SKPoint point, float wheelDelta = 0)
     {
         var now = Environment.TickCount64;
         switch (action)
         {
+            case SKTouchAction.WheelChanged:
+                HandleWheel(wheelDelta != 0 ? wheelDelta : 40f);
+                return null;
             case SKTouchAction.Pressed:
+                _active = true;
                 Stop();
                 // Only a thumb the player can see is grabbed; a hidden one leaves the press to the list.
                 var visible = Visibility > 0;
@@ -123,6 +136,7 @@ internal sealed class TouchScroller
                 }
                 return null;
             case SKTouchAction.Moved:
+                if (!_active) return null;
                 Touched();
                 if (HoldingThumb) { MoveThumb(point.Y); return null; }
                 if (!_dragging && Math.Abs(point.Y - _start.Y) > _slop) _dragging = true;
@@ -134,11 +148,14 @@ internal sealed class TouchScroller
                 }
                 return null;
             case SKTouchAction.Released:
+                if (!_active) return null;
+                _active = false;
                 Touched();
                 if (HoldingThumb) { HoldingThumb = false; _scrollTo(_offset()); return null; }
                 if (_dragging) { _dragging = false; Fling(now); return null; }
                 return point;
             case SKTouchAction.Cancelled:
+                _active = false;
                 HoldingThumb = _dragging = false;
                 return null;
             default:

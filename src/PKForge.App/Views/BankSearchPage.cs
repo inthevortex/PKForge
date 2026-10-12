@@ -663,6 +663,13 @@ public sealed class BankSearchPage : IPadPagingHandler
 
     private void Touch(object? sender, SKTouchEventArgs args)
     {
+        if (args.ActionType == SKTouchAction.WheelChanged)
+        {
+            args.Handled = true;
+            if (args.WheelDelta > 0) Page(-1);
+            else if (args.WheelDelta < 0) Page(1);
+            return;
+        }
         if (args.ActionType == SKTouchAction.Pressed) { args.Handled = true; return; }
         if (args.ActionType != SKTouchAction.Released) return;
         args.Handled = true;

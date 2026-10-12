@@ -47,6 +47,8 @@ public static class CapsuleSkin
 
     internal static bool IsSkinned(Button button) => States.TryGetValue(button, out _);
 
+    internal static bool TryGetState(Button button, out State state) => States.TryGetValue(button, out state!);
+
     internal static void SetFocused(Button button, bool focused)
     {
         if (!States.TryGetValue(button, out var state) || state.Focused == focused) return;
@@ -239,5 +241,9 @@ public static class CapsuleSkin
         var drop = (int)Math.Round(Dp(native, Drop + (state.Focused ? 1 : 0)));
         native.SetPadding((int)Dp(native, p.Left), (int)Dp(native, p.Top), (int)Dp(native, p.Right), (int)Dp(native, p.Bottom) + drop);
     }
+#elif PKFORGE_DESKTOP
+    public static void Register() => Platforms.Desktop.DesktopStyling.Register();
+#else
+    public static void Register() { }
 #endif
 }

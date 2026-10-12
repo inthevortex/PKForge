@@ -376,6 +376,13 @@ public sealed class BankBoxOverview : IPadPagingHandler
         var point = args.Location;
         switch (args.ActionType)
         {
+            case SKTouchAction.WheelChanged:
+                _longPress?.Stop();
+                var deltaRows = args.WheelDelta / RowHeight();
+                _scroll.Target = Math.Clamp(_scroll.Target - deltaRows, 0, Math.Max(0, (_boxes.Length - 1) / _columns - _visibleRows + 1.2f));
+                _scroll.Snap(_scroll.Target);
+                _frame.Request();
+                break;
             case SKTouchAction.Pressed:
                 _pressAt = point;
                 _finger = point;

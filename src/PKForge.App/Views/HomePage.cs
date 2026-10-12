@@ -215,6 +215,74 @@ public sealed class HomePage : ContentPage, IPadHandler
                 e.Handled = true;
             };
         };
+#elif PKFORGE_DESKTOP
+        void HookDesktop(Avalonia.Controls.Control platform)
+        {
+            var token = 0;
+            var pressing = false;
+            Avalonia.Point downPos = default;
+            const double slop = 10;
+            const int timeout = 500;
+
+            platform.PointerPressed += (_, e) =>
+            {
+                var pt = e.GetCurrentPoint(platform);
+                if (pt.Properties.IsRightButtonPressed)
+                {
+                    e.Handled = true;
+                    onLongPress();
+                    return;
+                }
+                if (pt.Properties.IsLeftButtonPressed)
+                {
+                    var pressed = ++token;
+                    pressing = true;
+                    downPos = e.GetPosition(platform);
+                    view.Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(timeout), () =>
+                    {
+                        if (pressed != token || !pressing) return;
+                        pressing = false;
+                        onLongPress();
+                    });
+                    e.Handled = true;
+                }
+            };
+
+            platform.PointerMoved += (_, e) =>
+            {
+                if (!pressing) return;
+                var pos = e.GetPosition(platform);
+                if (Math.Abs(pos.X - downPos.X) > slop || Math.Abs(pos.Y - downPos.Y) > slop)
+                {
+                    pressing = false;
+                    token++;
+                }
+            };
+
+            platform.PointerReleased += (_, e) =>
+            {
+                var wasPressing = pressing;
+                pressing = false;
+                token++;
+                if (wasPressing)
+                {
+                    e.Handled = true;
+                    onTap();
+                }
+            };
+
+            platform.PointerCaptureLost += (_, _) =>
+            {
+                pressing = false;
+                token++;
+            };
+        }
+
+        if (view.Handler?.PlatformView is Avalonia.Controls.Control direct) HookDesktop(direct);
+        view.HandlerChanged += (_, _) =>
+        {
+            if (view.Handler?.PlatformView is Avalonia.Controls.Control platform) HookDesktop(platform);
+        };
 #else
         var tap = new TapGestureRecognizer();
         tap.Tapped += (_, _) => onTap();
@@ -872,8 +940,13 @@ public sealed class HomePage : ContentPage, IPadHandler
     private async Task InstallUpdateAsync(AvailableAppUpdate update)
     {
         var service = IPlatformApplication.Current!.Services.GetRequiredService<AppUpdateService>();
+#if ANDROID
         var overlay = LoadingOverlay.Show(_hostGrid, "Downloading the update!",
             $"PKForge {update.Version} is on its way. Android will confirm the installation.");
+#else
+        var overlay = LoadingOverlay.Show(_hostGrid, "Downloading the update!",
+            $"PKForge {update.Version} is on its way. The system will confirm the installation.");
+#endif
         AppUpdateInstallResult result;
         try
         {
@@ -892,8 +965,13 @@ public sealed class HomePage : ContentPage, IPadHandler
         {
             AppLog.Error("update", $"Download/install failed: {error}");
             _viewModel.Status = $"Update failed: {error.Message}";
+#if ANDROID
             var openRelease = await PadMenu.ConfirmAsync(_hostGrid, "Open the release page?",
                 "The in-app installer could not finish. The GitHub release page has the same APK.", "Open");
+#else
+            var openRelease = await PadMenu.ConfirmAsync(_hostGrid, "Open the release page?",
+                "The in-app installer could not finish. The GitHub release page has the latest release.", "Open");
+#endif
             if (openRelease)
                 await Launcher.OpenAsync(update.ReleaseUrl);
             return;
@@ -906,8 +984,8 @@ public sealed class HomePage : ContentPage, IPadHandler
         switch (result)
         {
             case AppUpdateInstallResult.InstallerOpened:
-                _viewModel.Status = "Android is installing the update.";
 #if ANDROID
+                _viewModel.Status = "Android is installing the update.";
                 // Android answers later, through the install receiver; a refusal is shown here.
                 void OnFailed(string reason)
                 {
@@ -915,6 +993,8 @@ public sealed class HomePage : ContentPage, IPadHandler
                     _ = ReportInstallFailureAsync(update, reason);
                 }
                 UpdateInstallReceiver.Failed += OnFailed;
+#else
+                _viewModel.Status = "Installing the update…";
 #endif
                 break;
             case AppUpdateInstallResult.ReleasePageOpened:
@@ -922,9 +1002,15 @@ public sealed class HomePage : ContentPage, IPadHandler
                 break;
             case AppUpdateInstallResult.InstallPermissionRequired:
                 _pendingAuthorizedUpdate = update;
+#if ANDROID
                 var permissionChoice = await DialogueChoiceBox.ShowAsync(_hostGrid,
                     "Android needs permission to install PKForge updates. Allow install unknown apps for PKForge, then check again?",
                     "OPEN SETTINGS", "NOT NOW");
+#else
+                var permissionChoice = await DialogueChoiceBox.ShowAsync(_hostGrid,
+                    "Permission is needed to install PKForge updates. Allow PKForge updates, then check again?",
+                    "OPEN SETTINGS", "NOT NOW");
+#endif
                 if (permissionChoice == "OPEN SETTINGS")
                     AppUpdateService.OpenInstallPermissionSettings();
                 break;
@@ -934,8 +1020,13 @@ public sealed class HomePage : ContentPage, IPadHandler
     private async Task ReportInstallFailureAsync(AvailableAppUpdate update, string reason)
     {
         _viewModel.Status = $"Update failed: {reason}";
+#if ANDROID
         var openRelease = await PadMenu.ConfirmAsync(_hostGrid, "Open the release page?",
             $"Android did not install the update ({reason}). The GitHub release page has the same APK.", "Open");
+#else
+        var openRelease = await PadMenu.ConfirmAsync(_hostGrid, "Open the release page?",
+            $"The update could not be installed ({reason}). The GitHub release page has the latest release.", "Open");
+#endif
         if (openRelease)
             await Launcher.OpenAsync(update.ReleaseUrl);
     }

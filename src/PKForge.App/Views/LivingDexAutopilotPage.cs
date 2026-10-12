@@ -1112,7 +1112,16 @@ public sealed class LivingDexAutopilotPage : IPadHandler
 
     private void TouchList(object? sender, SKTouchEventArgs args)
     {
+        if (args.ActionType == SKTouchAction.WheelChanged)
+        {
+            args.Handled = true;
+            if (_rows.Count == 0 || _stage == Stage.Running) return;
+            if (args.WheelDelta > 0) MoveCursor(-1);
+            else if (args.WheelDelta < 0) MoveCursor(1);
+            return;
+        }
         if (args.ActionType == SKTouchAction.Pressed) { _pressed = true; args.Handled = true; return; }
+        if (args.ActionType == SKTouchAction.Cancelled) { _pressed = false; return; }
         // A release without its press is the tail of the tap that opened the window.
         if (args.ActionType != SKTouchAction.Released || !_pressed || _rows.Count == 0 || _stage == Stage.Running) return;
         _pressed = false;

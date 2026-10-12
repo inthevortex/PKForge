@@ -220,6 +220,7 @@ public sealed class MonSummaryView : ContentView
     private SKPoint _touchStart;
     private double _touchStartScroll;
     private bool _dragging, _swiping;
+    private bool _touchActive;
     private readonly List<(long Ms, float Y)> _touchTrail = new();
     private IDispatcherTimer? _fling;
     private double _flingVelocity; // design pixels per ms
@@ -237,7 +238,14 @@ public sealed class MonSummaryView : ContentView
         var now = Environment.TickCount64;
         switch (args.ActionType)
         {
+            case SKTouchAction.WheelChanged:
+                StopFling();
+                this.AbortAnimation(ScrollAnimation);
+                var wheelUnits = (args.WheelDelta / density) / _unit;
+                ScrollTo(_scrollY - wheelUnits);
+                break;
             case SKTouchAction.Pressed:
+                _touchActive = true;
                 StopFling();
                 this.AbortAnimation(ScrollAnimation);
                 _touchStart = point;
@@ -247,6 +255,7 @@ public sealed class MonSummaryView : ContentView
                 _touchTrail.Add((now, point.Y));
                 break;
             case SKTouchAction.Moved:
+                if (!_touchActive) break;
                 var dx = point.X - _touchStart.X;
                 var dy = point.Y - _touchStart.Y;
                 if (!_dragging && !_swiping && Math.Max(Math.Abs(dx), Math.Abs(dy)) > TouchSlopDp)
@@ -263,12 +272,15 @@ public sealed class MonSummaryView : ContentView
                 }
                 break;
             case SKTouchAction.Released:
+                if (!_touchActive) break;
+                _touchActive = false;
                 if (_dragging) StartFling(now);
                 else if (_swiping && Math.Abs(point.X - _touchStart.X) > SwipeTurnDp)
                     TurnPage(point.X < _touchStart.X ? 1 : -1, raise: true);
                 _dragging = _swiping = false;
                 break;
             case SKTouchAction.Cancelled:
+                _touchActive = false;
                 _dragging = _swiping = false;
                 break;
         }

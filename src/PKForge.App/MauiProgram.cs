@@ -23,9 +23,7 @@ public static class MauiProgram
         Services.AppLog.Install();
         var builder = MauiApp.CreateBuilder();
         App.Trace("CreateMauiApp enter");
-#if ANDROID
         Views.CapsuleSkin.Register();
-#endif
         builder.UseMauiApp<App>()
 #if ANDROID
             .UseSkiaSharp()

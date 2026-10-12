@@ -330,7 +330,7 @@ public sealed class DexGridView : SKCanvasView
     {
         args.Handled = true;
         EnsureLayout();
-        if (_scroller.Handle(args.ActionType, args.Location) is { } tap) TapAt(tap);
+        if (_scroller.Handle(args.ActionType, args.Location, args.WheelDelta) is { } tap) TapAt(tap);
         else if (args.ActionType is SKTouchAction.Pressed or SKTouchAction.Released) InvalidateSurface();
     }
 

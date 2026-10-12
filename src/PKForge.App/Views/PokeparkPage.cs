@@ -334,7 +334,11 @@ public sealed class PokeparkPage : ContentPage, IPadHandler
                 Reload();
             }
             else if (choice == "Widget help")
+#if ANDROID
                 await PadMenu.ShowAsync(_host, "A meadow on your home screen", "Add PKForge Poképark in Cocoon's widget picker. Resize it to give your Pokémon more room. The full meadow shows a quiet, living moment; tap it to return here. Your residents are saved between visits.", "OK");
+#else
+                await PadMenu.ShowAsync(_host, "A meadow on your home screen", "Home screen widgets are supported on mobile devices. On desktop, enjoy the meadow right here in PKForge! Your residents are saved between visits.", "OK");
+#endif
             else if (choice == "Sprite credits") await CreditsAsync();
         }
         finally { _menuOpen = false; }
