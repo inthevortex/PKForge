@@ -153,7 +153,6 @@ public sealed class SdlMixerMusicPlayer : IMusicPlayer, IDisposable
 
         unsafe
         {
-            // Resume if paused
             if (_track != null && SDL3_mixer.MIX_TrackPaused(_track))
             {
                 SDL3_mixer.MIX_ResumeTrack(_track);

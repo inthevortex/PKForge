@@ -15,6 +15,5 @@ public static class PokeparkWidgetPublisher
 
     public static void Publish(IReadOnlyList<byte[]> pngFrames)
     {
-        // No home screen widgets on desktop Linux.
     }
 }

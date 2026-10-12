@@ -40,7 +40,6 @@ public static class DesktopStyling
         if (_registered) return;
         _registered = true;
 
-        // Task 8.1: Map Label.VerticalTextAlignment to TextBlock.VerticalAlignment
         LabelHandler.Mapper.AppendToMapping(nameof(MLabel.VerticalTextAlignment), (handler, view) =>
         {
             if (handler.PlatformView is ATextBlock textBlock)
@@ -55,7 +54,6 @@ public static class DesktopStyling
             }
         });
 
-        // Task 8.2: CapsuleSkin button styling
         ButtonHandler.Mapper.AppendToMapping(nameof(Microsoft.Maui.IButton.Background), ApplyButtonSkin);
         ButtonHandler.Mapper.AppendToMapping(nameof(Microsoft.Maui.IButtonStroke.StrokeColor), ApplyButtonSkin);
         ButtonHandler.Mapper.AppendToMapping(nameof(Microsoft.Maui.IButtonStroke.StrokeThickness), ApplyButtonSkin);
@@ -64,7 +62,6 @@ public static class DesktopStyling
         ButtonHandler.Mapper.AppendToMapping(nameof(Microsoft.Maui.ITextStyle.TextColor), ApplyButtonSkin);
         ButtonHandler.Mapper.AppendToMapping(nameof(Microsoft.Maui.IPadding.Padding), ApplyButtonSkin);
 
-        // Core view layout mappings missing in Avalonia.Controls.Maui
         RegisterMissingViewMappings();
     }
 

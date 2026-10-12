@@ -23,7 +23,6 @@ public sealed class LocalTreeSourceTests : IDisposable
             }
             catch
             {
-                // Best-effort cleanup
             }
         }
     }
@@ -103,7 +102,6 @@ public sealed class LocalTreeSourceTests : IDisposable
         }
         catch (Exception)
         {
-            // Skip if filesystem does not support symlinks
             return;
         }
 
@@ -131,7 +129,6 @@ public sealed class LocalTreeSourceTests : IDisposable
         }
         catch (Exception)
         {
-            // Skip if symlinks not supported
             return;
         }
 
@@ -140,14 +137,11 @@ public sealed class LocalTreeSourceTests : IDisposable
 
         Assert.True(hasInodeA);
         Assert.True(hasInodeLoop);
-        // stat follows symlinks, so dev+ino of loopLink must match dirA
         Assert.Equal(devA, devLoop);
         Assert.Equal(inoA, inoLoop);
 
-        // Root initializes visited inodes with dirA
         _tree.Root(dirA);
 
-        // Listing dirA should encounter dirA/loop and prune it to prevent infinite loop
         var entries = _tree.List(dirA);
         Assert.DoesNotContain(entries, e => e.Name == "loop");
     }

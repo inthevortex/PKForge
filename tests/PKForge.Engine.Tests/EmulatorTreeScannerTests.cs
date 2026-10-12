@@ -27,7 +27,6 @@ public sealed class EmulatorTreeScannerTests : IDisposable
             }
             catch
             {
-                // Best effort cleanup in tests
             }
         }
     }
@@ -233,7 +232,6 @@ public sealed class EmulatorTreeScannerTests : IDisposable
     [Fact]
     public void EdenScansOldLayoutNewAccountLayoutAndDirectSaveGrant()
     {
-        // 1. Old layout: nand/user/save/0000000000000000/<uid>/<tid>/main
         var oldRoot = Path.Combine(_temp, "eden_old");
         var oldSlot = Path.Combine(oldRoot, "nand", "user", "save", "0000000000000000", "0000000000000001", "0100000011D90000");
         Directory.CreateDirectory(oldSlot);
@@ -244,7 +242,6 @@ public sealed class EmulatorTreeScannerTests : IDisposable
         var oldSave = Assert.Single(oldResult.Saves);
         Assert.Contains("Brilliant Diamond", oldSave.GameLabel);
 
-        // 2. New account layout: account/<uuid>/<tid>/0/main
         var newRoot = Path.Combine(_temp, "eden_new");
         var newSlot = Path.Combine(newRoot, "account", "12345678123456781234567812345678", "010018E011D92000", "0");
         Directory.CreateDirectory(newSlot);
@@ -254,7 +251,6 @@ public sealed class EmulatorTreeScannerTests : IDisposable
         var newSave = Assert.Single(newResult.Saves);
         Assert.Contains("Shining Pearl", newSave.GameLabel);
 
-        // 3. Direct save root grant: root folder is named "save"
         var directSaveRoot = Path.Combine(_temp, "save");
         var directSlot = Path.Combine(directSaveRoot, "0000000000000000", "0000000000000001", "0100000011D90000");
         Directory.CreateDirectory(directSlot);
@@ -280,14 +276,12 @@ public sealed class EmulatorTreeScannerTests : IDisposable
         var result1 = scanner1.Scan(root, EmulatorKind.PizzaBoyGba);
         Assert.Single(result1.Saves);
 
-        // Second scan: cache hit
         var scanner2 = new EmulatorTreeScanner<string>(_engine, _tree, cacheStore, buildEpoch: epoch);
         var result2 = scanner2.Scan(root, EmulatorKind.PizzaBoyGba);
         Assert.Single(result2.Saves);
         Assert.NotNull(result2.Diagnostics);
         Assert.Contains(result2.Diagnostics!, d => d.Contains("CACHED"));
 
-        // Change mtime: cache miss
         File.SetLastWriteTimeUtc(savePath, DateTime.UtcNow.AddMinutes(5));
         var scanner3 = new EmulatorTreeScanner<string>(_engine, _tree, cacheStore, buildEpoch: epoch);
         var result3 = scanner3.Scan(root, EmulatorKind.PizzaBoyGba);
@@ -295,7 +289,6 @@ public sealed class EmulatorTreeScannerTests : IDisposable
         Assert.NotNull(result3.Diagnostics);
         Assert.DoesNotContain(result3.Diagnostics!, d => d.Contains("CACHED"));
 
-        // Change build epoch: cache miss
         var scanner4 = new EmulatorTreeScanner<string>(_engine, _tree, cacheStore, buildEpoch: epoch + 1);
         var result4 = scanner4.Scan(root, EmulatorKind.PizzaBoyGba);
         Assert.Single(result4.Saves);
@@ -317,7 +310,6 @@ public sealed class EmulatorTreeScannerTests : IDisposable
         Assert.Empty(res1.Saves);
         Assert.Contains("corrupted.sav", res1.RejectedCandidates);
 
-        // Second scan should hit negative cache
         var scanner2 = new EmulatorTreeScanner<string>(_engine, _tree, cacheStore);
         var res2 = scanner2.Scan(root, EmulatorKind.MelonDS);
         Assert.Empty(res2.Saves);

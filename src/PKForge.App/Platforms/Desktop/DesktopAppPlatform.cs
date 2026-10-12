@@ -32,7 +32,6 @@ public sealed class DesktopAppPlatform : IAppPlatform
 
     public void Haptic(HapticKind kind)
     {
-        // Handled via SDL rumble in Step 7
     }
 
     public static string GetExportDirectory()
@@ -85,7 +84,6 @@ public sealed class DesktopAppPlatform : IAppPlatform
                 }
                 catch (InvalidOperationException)
                 {
-                    // Fallback to default exportDir copy if dialog concurrency guard triggers
                 }
             }
         }
@@ -125,7 +123,6 @@ public sealed class DesktopAppPlatform : IAppPlatform
                 }
                 catch (InvalidOperationException)
                 {
-                    // Fallback to exportDir copy
                 }
             }
         }

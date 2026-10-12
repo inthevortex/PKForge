@@ -34,9 +34,7 @@ public sealed class KeyboardSource
         var focused = _window.FocusManager?.GetFocusedElement();
         bool isTextBox = focused is TextBox;
 
-        // §5.6.2: Text-entry conflict rule:
-        // When a TextBox has focus, only Escape (-> B) and Enter (-> A) go to the router.
-        // Every other key goes to the text box.
+        // When a TextBox has focus, only Escape and Enter route to the pad; all other keys pass to the text box.
         if (isTextBox)
         {
             if (e.Key is Key.Escape)

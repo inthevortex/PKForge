@@ -28,7 +28,6 @@ public sealed class EmulatorRootDiscoveryTests : IDisposable
             }
             catch
             {
-                // Best-effort cleanup
             }
         }
     }
@@ -108,15 +107,12 @@ public sealed class EmulatorRootDiscoveryTests : IDisposable
     [Fact]
     public async Task RyujinxAndEdenAndThreeDs_DiscoversStandardPaths()
     {
-        // 1. Ryujinx bis user save
         var ryuSave = Path.Combine(_home, ".config", "Ryujinx", "bis", "user", "save");
         Directory.CreateDirectory(ryuSave);
 
-        // 2. Eden / Yuzu nand user save
         var yuzuSave = Path.Combine(_home, ".local", "share", "yuzu", "nand", "user", "save");
         Directory.CreateDirectory(yuzuSave);
 
-        // 3. Citra / Azahar sdmc
         var citraSdmc = Path.Combine(_home, ".local", "share", "citra-emu", "sdmc");
         Directory.CreateDirectory(citraSdmc);
 
@@ -171,11 +167,9 @@ public sealed class EmulatorRootDiscoveryTests : IDisposable
         }
         catch
         {
-            // If symlinks not supported, skip
             return;
         }
 
-        // Add two roots pointing to real and symlink
         var cfgDir = Path.Combine(_home, ".config", "retroarch");
         Directory.CreateDirectory(cfgDir);
         File.WriteAllText(Path.Combine(cfgDir, "retroarch.cfg"), $"savefile_directory = \"{symlinkDir}\"");
@@ -187,7 +181,6 @@ public sealed class EmulatorRootDiscoveryTests : IDisposable
         var discovery = new LinuxEmulatorRootDiscovery(_home, _media);
         var roots = await discovery.DiscoverRootsAsync();
 
-        // Both pointed to realDir (one via retroarch, one via EmuDeck), deduplication collapses to unique real paths
         var matching = roots.Where(r => r.TreeId == realDir).ToList();
         Assert.Single(matching);
     }

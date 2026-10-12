@@ -16,6 +16,7 @@ public sealed class JsonFileScanCacheStore : IScanCacheStore
         WriteIndented = false,
     };
 
+    private static readonly Lock Gate = new();
     private readonly string _filePath;
 
     public JsonFileScanCacheStore(string? filePath = null)
@@ -31,39 +32,73 @@ public sealed class JsonFileScanCacheStore : IScanCacheStore
 
     public Dictionary<string, ScanCacheEntry> Load()
     {
-        try
+        lock (Gate)
         {
-            if (!File.Exists(_filePath))
-                return [];
+            try
+            {
+                if (!File.Exists(_filePath))
+                    return [];
 
-            var json = File.ReadAllText(_filePath);
-            var result = JsonSerializer.Deserialize<Dictionary<string, ScanCacheEntry>>(json, JsonOptions);
-            return result ?? [];
-        }
-        catch
-        {
-            return [];
+                var json = File.ReadAllText(_filePath);
+                var result = JsonSerializer.Deserialize<Dictionary<string, ScanCacheEntry>>(json, JsonOptions);
+                return result ?? [];
+            }
+            catch
+            {
+                return [];
+            }
         }
     }
 
     public void Save(IReadOnlyDictionary<string, ScanCacheEntry> entries)
     {
-        try
+        lock (Gate)
         {
-            var dir = Path.GetDirectoryName(_filePath);
-            if (!string.IsNullOrEmpty(dir))
-                Directory.CreateDirectory(dir);
+            try
+            {
+                var dir = Path.GetDirectoryName(_filePath);
+                if (!string.IsNullOrEmpty(dir))
+                    Directory.CreateDirectory(dir);
 
-            var fileName = Path.GetFileName(_filePath);
-            var tempPath = Path.Combine(dir ?? ".", $".{fileName}.{Guid.NewGuid():N}.tmp");
+                // If file already exists, merge with latest on-disk entries so parallel scanners don't overwrite each other's keys
+                Dictionary<string, ScanCacheEntry> toWrite;
+                if (File.Exists(_filePath))
+                {
+                    try
+                    {
+                        var diskJson = File.ReadAllText(_filePath);
+                        var diskEntries = JsonSerializer.Deserialize<Dictionary<string, ScanCacheEntry>>(diskJson, JsonOptions);
+                        if (diskEntries != null && diskEntries.Count > 0)
+                        {
+                            toWrite = new Dictionary<string, ScanCacheEntry>(diskEntries, StringComparer.Ordinal);
+                            foreach (var (k, v) in entries)
+                                toWrite[k] = v;
+                        }
+                        else
+                        {
+                            toWrite = new Dictionary<string, ScanCacheEntry>(entries);
+                        }
+                    }
+                    catch
+                    {
+                        toWrite = new Dictionary<string, ScanCacheEntry>(entries);
+                    }
+                }
+                else
+                {
+                    toWrite = new Dictionary<string, ScanCacheEntry>(entries);
+                }
 
-            var json = JsonSerializer.Serialize(entries, JsonOptions);
-            File.WriteAllText(tempPath, json);
-            File.Move(tempPath, _filePath, overwrite: true);
-        }
-        catch
-        {
-            // Best effort persistent caching
+                var fileName = Path.GetFileName(_filePath);
+                var tempPath = Path.Combine(dir ?? ".", $".{fileName}.{Guid.NewGuid():N}.tmp");
+
+                var json = JsonSerializer.Serialize(toWrite, JsonOptions);
+                File.WriteAllText(tempPath, json);
+                File.Move(tempPath, _filePath, overwrite: true);
+            }
+            catch
+            {
+            }
         }
     }
 }

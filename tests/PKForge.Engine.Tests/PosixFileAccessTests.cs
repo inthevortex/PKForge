@@ -44,7 +44,6 @@ public sealed class PosixFileAccessTests : IDisposable
         var read = await access.ReadAsync(filePath);
         Assert.Equal(data, read.ToArray());
 
-        // Verify no leftover temporary files in directory
         var tmpFiles = Directory.EnumerateFiles(_testDir, ".*pkforge-tmp").ToList();
         Assert.Empty(tmpFiles);
     }
@@ -65,27 +64,21 @@ public sealed class PosixFileAccessTests : IDisposable
 
         File.CreateSymbolicLink(linkPath, realPath);
 
-        // Verify it is initially a symlink
         Assert.NotNull(File.ResolveLinkTarget(linkPath, returnFinalTarget: true));
 
-        // Write through the symlink
         var updatedData = new byte[] { 99, 88, 77, 66 };
         await access.WriteAtomicallyAsync(linkPath, updatedData);
 
-        // 1. Target file updated
         var realBytes = await File.ReadAllBytesAsync(realPath);
         Assert.Equal(updatedData, realBytes);
 
-        // 2. Symlink still exists and still points to target
         var resolved = File.ResolveLinkTarget(linkPath, returnFinalTarget: true);
         Assert.NotNull(resolved);
         Assert.Equal(Path.GetFullPath(realPath), Path.GetFullPath(resolved.FullName));
 
-        // 3. Reading through symlink returns updated data
         var linkBytes = await access.ReadAsync(linkPath);
         Assert.Equal(updatedData, linkBytes.ToArray());
 
-        // 4. Temporary files cleaned up in both directories
         Assert.Empty(Directory.EnumerateFiles(targetDir, ".*pkforge-tmp"));
         Assert.Empty(Directory.EnumerateFiles(linkDir, ".*pkforge-tmp"));
     }
@@ -106,10 +99,8 @@ public sealed class PosixFileAccessTests : IDisposable
         var updated = new byte[] { 2, 2, 2 };
         await access.WriteAtomicallyAsync(hop2, updated);
 
-        // Final target was updated
         Assert.Equal(updated, await File.ReadAllBytesAsync(realPath));
 
-        // Both hops are still symlinks
         Assert.NotNull(File.ResolveLinkTarget(hop1, returnFinalTarget: true));
         Assert.NotNull(File.ResolveLinkTarget(hop2, returnFinalTarget: true));
     }
@@ -181,7 +172,6 @@ public sealed class PosixFileAccessTests : IDisposable
 
         Assert.False(DialogConcurrencyGuard.IsActive);
 
-        // After releasing, another enter succeeds
         using (var guard2 = DialogConcurrencyGuard.Enter())
         {
             Assert.True(DialogConcurrencyGuard.IsActive);

@@ -162,6 +162,7 @@ public sealed class LinuxEmulatorRootDiscovery(string? homeDirectory = null, str
         string[] defaultPaths =
         [
             Path.Combine(_home, ".local", "share", "mgba"),
+            Path.Combine(_home, ".var", "app", "io.mgba.mGBA", "data", "mgba"),
             Path.Combine(_home, ".config", "mgba")
         ];
         foreach (var path in defaultPaths)
@@ -253,7 +254,6 @@ public sealed class LinuxEmulatorRootDiscovery(string? homeDirectory = null, str
 
     private void DiscoverEmuDeckAndRetroDeck(List<DiscoveredRoot> list)
     {
-        // 1. EmuDeck settings.sh
         var emudeckSettings = Path.Combine(_home, "emudeck", "settings.sh");
         if (File.Exists(emudeckSettings))
         {
@@ -266,7 +266,6 @@ public sealed class LinuxEmulatorRootDiscovery(string? homeDirectory = null, str
             }
         }
 
-        // 2. Default EmuDeck paths
         var defaultRoms = Path.Combine(_home, "Emulation", "roms");
         if (Directory.Exists(defaultRoms))
             list.Add(new DiscoveredRoot(EmulatorKind.RomFolder, defaultRoms, "EmuDeck ROMs", "EmuDeck"));
@@ -275,7 +274,6 @@ public sealed class LinuxEmulatorRootDiscovery(string? homeDirectory = null, str
         if (Directory.Exists(defaultRaSaves))
             list.Add(new DiscoveredRoot(EmulatorKind.RetroArch, defaultRaSaves, "EmuDeck RetroArch Saves", "EmuDeck"));
 
-        // 3. RetroDECK
         string[] retrodeckPaths =
         [
             Path.Combine(_home, "retrodeck", "roms"),
@@ -298,39 +296,52 @@ public sealed class LinuxEmulatorRootDiscovery(string? homeDirectory = null, str
 
         try
         {
-            // Traverse up to 2 levels under mediaPrefix (e.g. /run/media/<user>/<drivename>)
-            var users = Directory.GetDirectories(_media);
-            foreach (var userDir in users)
+            void ProbeDrive(string drive)
             {
-                var drives = Directory.GetDirectories(userDir);
-                foreach (var drive in drives)
+                var driveName = Path.GetFileName(drive);
+                string[] relativeRomRoots =
+                [
+                    Path.Combine(drive, "Emulation", "roms"),
+                    Path.Combine(drive, "Game Setups", "Emulation", "roms"),
+                    Path.Combine(drive, "roms"),
+                ];
+
+                foreach (var romRoot in relativeRomRoots)
                 {
-                    var driveName = Path.GetFileName(drive);
-                    string[] relativeRomRoots =
-                    [
-                        Path.Combine(drive, "Emulation", "roms"),
-                        Path.Combine(drive, "Game Setups", "Emulation", "roms"),
-                        Path.Combine(drive, "roms"),
-                    ];
-
-                    foreach (var romRoot in relativeRomRoots)
+                    if (Directory.Exists(romRoot))
                     {
-                        if (Directory.Exists(romRoot))
-                        {
-                            list.Add(new DiscoveredRoot(EmulatorKind.RomFolder, romRoot, $"ROMs ({driveName})", "Mounted Drive"));
-                            break;
-                        }
+                        list.Add(new DiscoveredRoot(EmulatorKind.RomFolder, romRoot, $"ROMs ({driveName})", "Mounted Drive"));
+                        break;
                     }
+                }
 
-                    var raSaves = Path.Combine(drive, "Emulation", "saves", "retroarch", "saves");
-                    if (Directory.Exists(raSaves))
-                        list.Add(new DiscoveredRoot(EmulatorKind.RetroArch, raSaves, $"RetroArch Saves ({driveName})", "Mounted Drive"));
+                var raSaves = Path.Combine(drive, "Emulation", "saves", "retroarch", "saves");
+                if (Directory.Exists(raSaves))
+                    list.Add(new DiscoveredRoot(EmulatorKind.RetroArch, raSaves, $"RetroArch Saves ({driveName})", "Mounted Drive"));
+            }
+
+            // Traverse 1 level (e.g. SteamOS /run/media/mmcblk0p1 or direct mounts)
+            // and 2 levels (e.g. standard Linux /run/media/<user>/<drivename>)
+            var topLevel = Directory.GetDirectories(_media);
+            foreach (var dir in topLevel)
+            {
+                ProbeDrive(dir);
+
+                try
+                {
+                    var subDrives = Directory.GetDirectories(dir);
+                    foreach (var subDrive in subDrives)
+                    {
+                        ProbeDrive(subDrive);
+                    }
+                }
+                catch
+                {
                 }
             }
         }
         catch
         {
-            // Inaccessible media mount
         }
     }
 
@@ -373,7 +384,6 @@ public sealed class LinuxEmulatorRootDiscovery(string? homeDirectory = null, str
         }
         catch
         {
-            // Ignore parse errors
         }
         return null;
     }
@@ -407,7 +417,6 @@ public sealed class LinuxEmulatorRootDiscovery(string? homeDirectory = null, str
         }
         catch
         {
-            // Ignore parse errors
         }
         return null;
     }
@@ -427,7 +436,6 @@ public sealed class LinuxEmulatorRootDiscovery(string? homeDirectory = null, str
         }
         catch
         {
-            // Ignore parse errors
         }
         return null;
     }

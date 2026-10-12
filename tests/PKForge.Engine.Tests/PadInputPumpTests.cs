@@ -63,15 +63,12 @@ public sealed class PadInputPumpTests
     [Fact]
     public void EvaluateDirection_DominantAxisResolvesCorrectly()
     {
-        // Dominant vertical
         Assert.Equal(PadButton.Up, PadInputPump.EvaluateDirection(0f, -0.6f));
         Assert.Equal(PadButton.Down, PadInputPump.EvaluateDirection(0f, 0.6f));
 
-        // Dominant horizontal
         Assert.Equal(PadButton.Left, PadInputPump.EvaluateDirection(-0.8f, 0.2f));
         Assert.Equal(PadButton.Right, PadInputPump.EvaluateDirection(0.8f, -0.3f));
 
-        // Tie-break (|y| >= |x| means vertical wins)
         Assert.Equal(PadButton.Up, PadInputPump.EvaluateDirection(0.6f, -0.6f));
         Assert.Equal(PadButton.Down, PadInputPump.EvaluateDirection(-0.6f, 0.6f));
     }
@@ -104,13 +101,11 @@ public sealed class PadInputPumpTests
 
         using var pump = new PadInputPump(router);
 
-        // Directional buttons return true to prevent native focus escape
         Assert.True(pump.Press(PadButton.Up));
         Assert.True(pump.Press(PadButton.Down));
         Assert.True(pump.Press(PadButton.Left));
         Assert.True(pump.Press(PadButton.Right));
 
-        // Non-directional unhandled buttons return false
         Assert.False(pump.Press(PadButton.A));
         Assert.False(pump.Press(PadButton.B));
     }
@@ -188,11 +183,9 @@ public sealed class PadInputPumpTests
         pump.Press(PadButton.Down);
         Assert.Single(handler.HandledButtons);
 
-        // Before hold delay
         await Task.Delay(30);
         Assert.Single(handler.HandledButtons);
 
-        // After hold delay + repeat, wait for at least 2 dispatches
         var deadline = DateTime.UtcNow.AddMilliseconds(800);
         while (handler.HandledButtons.Count < 2 && DateTime.UtcNow < deadline)
         {
@@ -220,7 +213,6 @@ public sealed class PadInputPumpTests
             ShoulderRepeatMs = 25,
         };
 
-        // Normal handler does not implement IPadPagingHandler -> should NOT repeat
         pump.Press(PadButton.R);
         Assert.Null(pump.CurrentRepeatButton);
         Assert.Single(normalHandler.HandledButtons);
@@ -229,7 +221,6 @@ public sealed class PadInputPumpTests
         Assert.Single(normalHandler.HandledButtons);
         pump.Release(PadButton.R);
 
-        // Push paging handler -> SHOULD repeat
         var pagingHandler = new TestPagingHandler { ShouldersRepeat = true };
         router.Push(pagingHandler);
 
@@ -259,12 +250,10 @@ public sealed class PadInputPumpTests
             HatRepeatMs = 25,
         };
 
-        // Deflect up
         Assert.True(pump.Motion(0f, -0.9f));
         Assert.Equal(PadButton.Up, pump.CurrentHatDirection);
         Assert.Single(handler.HandledButtons);
 
-        // Wait for hat repeat
         var deadline = DateTime.UtcNow.AddMilliseconds(800);
         while (handler.HandledButtons.Count < 2 && DateTime.UtcNow < deadline)
         {
@@ -273,12 +262,10 @@ public sealed class PadInputPumpTests
         Assert.True(handler.HandledButtons.Count >= 2);
         Assert.All(handler.HandledButtons, btn => Assert.Equal(PadButton.Up, btn));
 
-        // Change deflection to right
         Assert.True(pump.Motion(0.9f, 0f));
         Assert.Equal(PadButton.Right, pump.CurrentHatDirection);
         Assert.Equal(PadButton.Right, handler.HandledButtons.Last());
 
-        // Release stick to center
         Assert.False(pump.Motion(0f, 0f));
         Assert.Null(pump.CurrentHatDirection);
     }

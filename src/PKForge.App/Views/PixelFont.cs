@@ -118,11 +118,11 @@ public static class PixelFont
     /// <summary>The pixel face at a size, with antialiasing off-ish (it is a pixel font).</summary>
     public static SKFont At(float size) => new(Face, size) { Edging = SKFontEdging.Antialias, Embolden = true };
 
-    /// <summary>The pixel face when it can draw every glyph of the text, else the system default (CJK nicknames).</summary>
+    /// <summary>The pixel face when it can draw every glyph of the text, else the bundled fallback face (CJK nicknames).</summary>
     public static SKFont For(string text, float size)
     {
         var face = Face;
         var covered = text.All(c => face.GetGlyph(c) != 0);
-        return new SKFont(covered ? face : SKTypeface.Default, size) { Edging = SKFontEdging.Antialias, Embolden = true };
+        return new SKFont(covered ? face : FallbackFace, size) { Edging = SKFontEdging.Antialias, Embolden = true };
     }
 }

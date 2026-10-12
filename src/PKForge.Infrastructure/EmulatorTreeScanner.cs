@@ -247,7 +247,6 @@ public sealed class EmulatorTreeScanner<TNode>(
         TNode? userSaveDir = null;
         Dictionary<ulong, ulong> imkvdbMap = [];
 
-        // 1. Probe for imkvdb.arc
         string[][] imkvdbPaths =
         [
             ["bis", "system", "save", "8000000000000000", "0"],
@@ -276,7 +275,6 @@ public sealed class EmulatorTreeScanner<TNode>(
             }
         }
 
-        // 2. Locate user save directory
         if (string.Equals(rootName, "save", StringComparison.OrdinalIgnoreCase))
         {
             state.Trace($"Ryujinx root grant recognized by root name '{rootName}'");
@@ -304,7 +302,6 @@ public sealed class EmulatorTreeScanner<TNode>(
 
         userSaveDir ??= root;
 
-        // 3. Recursively find saves
         var results = new List<DetectedSave>();
         FindFilesRecursive(userSaveDir, EdenMaxDepth, cancellationToken, child =>
         {

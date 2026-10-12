@@ -35,7 +35,7 @@ public class PosixSaveFileAccess : ISaveFileAccess
             throw new IOException($"Target directory '{directory}' does not exist.");
 
         var fileName = Path.GetFileName(writeTarget);
-        var tmp = Path.Combine(directory, $".{fileName}.pkforge-tmp");
+        var tmp = Path.Combine(directory, $".{fileName}.{Guid.NewGuid():N}.pkforge-tmp");
 
         UnixFileMode? originalMode = null;
         if (!OperatingSystem.IsWindows() && File.Exists(writeTarget))
@@ -115,7 +115,6 @@ public class PosixSaveFileAccess : ISaveFileAccess
         }
         catch
         {
-            // Directory fsync is best-effort
         }
     }
 

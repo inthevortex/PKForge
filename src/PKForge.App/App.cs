@@ -115,12 +115,15 @@ public sealed class App : Application
             var services = IPlatformApplication.Current?.Services
                 ?? throw new InvalidOperationException("MAUI services are unavailable.");
             var root = CreateRoot(services);
+#if PKFORGE_DESKTOP
+            var (initW, initH) = GetInitialDesktopWindowSize();
+#endif
             return new Window(root)
             {
                 Title = "PKForge",
 #if PKFORGE_DESKTOP
-                Width = 1920,
-                Height = 1080,
+                Width = initW,
+                Height = initH,
 #endif
             };
         }
@@ -149,4 +152,29 @@ public sealed class App : Application
             };
         }
     }
+
+#if PKFORGE_DESKTOP
+    private static (double Width, double Height) GetInitialDesktopWindowSize()
+    {
+        try
+        {
+            var display = Microsoft.Maui.Devices.DeviceDisplay.MainDisplayInfo;
+            if (display.Width > 0 && display.Height > 0)
+            {
+                double density = display.Density > 0 ? display.Density : 1.0;
+                double availW = display.Width / density;
+                double availH = display.Height / density;
+                if (availW <= 1280 || availH <= 800)
+                {
+                    return (Math.Min(1280, availW), Math.Min(800, availH));
+                }
+                return (Math.Min(1920, availW), Math.Min(1080, availH));
+            }
+        }
+        catch
+        {
+        }
+        return (1280, 800);
+    }
+#endif
 }

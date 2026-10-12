@@ -103,13 +103,11 @@ public sealed class LocalTreeSource : ITreeSource<string>
                 }
                 catch
                 {
-                    // Inaccessible entry
                 }
             }
         }
         catch
         {
-            // Directory unreadable
         }
         return result;
     }
@@ -179,7 +177,6 @@ public sealed class LocalTreeSource : ITreeSource<string>
         }
         catch
         {
-            // Fall back
         }
         return false;
     }
