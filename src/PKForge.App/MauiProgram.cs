@@ -118,7 +118,7 @@ public static class MauiProgram
             dispatchToUi: action => Avalonia.Threading.Dispatcher.UIThread.Post(action)
         ));
         builder.Services.AddSingleton<ISaveFileAccess, Platforms.Desktop.PosixSaveFileAccess>();
-        builder.Services.AddSingleton<IMusicPlayer, Platforms.Desktop.DesktopMusicPlayer>();
+        builder.Services.AddSingleton<IMusicPlayer, Platforms.Desktop.SdlMixerMusicPlayer>();
         builder.Services.AddSingleton<IDocumentPicker, Platforms.Desktop.DesktopDocumentPicker>();
         builder.Services.AddSingleton<ISecondaryDisplayHost, Platforms.Desktop.NullSecondaryDisplayHost>();
         builder.Services.AddSingleton<IFolderPicker, Platforms.Desktop.DesktopFolderPicker>();

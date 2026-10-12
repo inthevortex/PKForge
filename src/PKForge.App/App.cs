@@ -29,6 +29,18 @@ public sealed class App : Application
         Resumed?.Invoke();
     }
 
+    public static void RaiseSuspended()
+    {
+        Suspended?.Invoke();
+        Music?.PauseForBackground();
+    }
+
+    public static void RaiseResumed()
+    {
+        Music?.ResumeFromBackground();
+        Resumed?.Invoke();
+    }
+
     public App()
     {
         Trace("App ctor");

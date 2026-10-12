@@ -30,6 +30,8 @@ public sealed class BadAppleEgg : IPadHandler
     private readonly System.Diagnostics.Stopwatch _clock = new();
 #if ANDROID
     private MediaPlayer? _song;
+#elif PKFORGE_DESKTOP
+    private Platforms.Desktop.DesktopBadAppleAudio? _song;
 #endif
     private bool _closed;
 
@@ -106,6 +108,29 @@ public sealed class BadAppleEgg : IPadHandler
             // No song: the picture still plays, on its own clock.
             AppLog.Warn("about", $"The easter egg plays without its song: {error.Message}");
         }
+#elif PKFORGE_DESKTOP
+        try
+        {
+            var path = Path.Combine(FileSystem.CacheDirectory, "badapple.ogg");
+            if (!File.Exists(path))
+            {
+                await using var asset = await FileSystem.OpenAppPackageFileAsync("badapple/audio.ogg");
+                var partial = path + ".part";
+                await using (var file = File.Create(partial)) await asset.CopyToAsync(file);
+                File.Move(partial, path, overwrite: true);
+            }
+            if (_closed) return;
+            var song = new Platforms.Desktop.DesktopBadAppleAudio(path);
+            song.Completion += () => MainThread.BeginInvokeOnMainThread(Close);
+            if (_closed) { song.Dispose(); return; }
+            _song = song;
+            song.Start();
+        }
+        catch (Exception error) when (error is IOException or InvalidOperationException)
+        {
+            // No song: the picture still plays, on its own clock.
+            AppLog.Warn("about", $"The easter egg plays without its song: {error.Message}");
+        }
 #else
         await Task.CompletedTask;
 #endif
@@ -130,6 +155,10 @@ public sealed class BadAppleEgg : IPadHandler
         _song?.Stop();
         _song?.Release();
         _song = null;
+#elif PKFORGE_DESKTOP
+        _song?.Stop();
+        _song?.Dispose();
+        _song = null;
 #endif
         _frames.Dispose();
         _font.Dispose();
@@ -143,18 +172,14 @@ public sealed class BadAppleEgg : IPadHandler
         var theme = ColorTheme.Current;
         canvas.Clear(theme.Void);
         if (_closed || !_clock.IsRunning) return;
-#if ANDROID
+#if ANDROID || PKFORGE_DESKTOP
         var ms = _song is { } song ? song.CurrentPosition : _clock.ElapsedMilliseconds;
 #else
         var ms = _clock.ElapsedMilliseconds;
 #endif
         if (!_frames.SeekForward((int)(ms * _frames.Fps / 1000)))
         {
-#if ANDROID
             if (_song is null) MainThread.BeginInvokeOnMainThread(Close);
-#else
-            MainThread.BeginInvokeOnMainThread(Close);
-#endif
             return;
         }
         _painter.Paint(canvas, new SKRect(0, 0, args.Info.Width, args.Info.Height), _frames, _font, theme);
