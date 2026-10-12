@@ -486,9 +486,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
         }
         catch (Exception ex)
         {
-#if DEBUG
             AppLog.Warn("fonts", $"Failed to load NDS12.ttf in PixelTypeface: {ex.Message}");
-#endif
         }
         if (_pixelTypeface is null)
         {

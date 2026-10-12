@@ -67,9 +67,7 @@ public static class PixelFont
         }
         catch (Exception ex)
         {
-#if DEBUG
             AppLog.Warn("fonts", $"Failed to load NDS12.ttf: {ex.Message}");
-#endif
             face = FallbackWithWarning("NDS12.ttf");
         }
         Volatile.Write(ref _face, face);
@@ -108,9 +106,7 @@ public static class PixelFont
                 }
                 catch (Exception ex)
                 {
-#if DEBUG
                     AppLog.Warn("fonts", $"Failed to load MPLUSRounded1c-Regular.ttf: {ex.Message}");
-#endif
                     face = FallbackWithWarning("MPLUSRounded1c-Regular.ttf");
                 }
                 Volatile.Write(ref _fallback, face);

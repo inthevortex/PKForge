@@ -20,7 +20,7 @@ public sealed class DesktopEmulatorScanner(ISaveEngine engine) : IIncrementalEmu
             if (_buildEpoch >= 0) return _buildEpoch;
             try
             {
-                var binary = Environment.ProcessPath ?? typeof(DesktopEmulatorScanner).Assembly.Location;
+                var binary = Environment.ProcessPath ?? AppContext.BaseDirectory;
                 _buildEpoch = File.Exists(binary) ? File.GetLastWriteTimeUtc(binary).Ticks : 0;
             }
             catch

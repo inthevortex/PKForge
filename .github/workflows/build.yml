@@ -7,9 +7,7 @@ on:
   pull_request:
 
 jobs:
-  test-and-build:
-    permissions:
-      contents: write
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,8 +25,26 @@ jobs:
         run: |
           dotnet test tests/PKForge.Domain.Tests/PKForge.Domain.Tests.csproj --no-restore --configuration Release
           dotnet test tests/PKForge.Engine.Tests/PKForge.Engine.Tests.csproj --no-restore --configuration Release
+
+  android:
+    needs: test
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.x
+          dotnet-quality: preview
+      - name: Install MAUI Android workload
+        run: dotnet workload install maui-android
+      - name: Restore
+        run: dotnet restore PKForge.sln
       - name: Decode permanent release signing key
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' && github.repository == 'sofianeelhor/PKForge'
         env:
           PKFORGE_ANDROID_KEYSTORE_BASE64: ${{ secrets.PKFORGE_ANDROID_KEYSTORE_BASE64 }}
         run: |
@@ -47,7 +63,7 @@ jobs:
         run: |
           configuration="Debug"
           signing_args=(-p:AndroidKeyStore=false)
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REPOSITORY" == "sofianeelhor/PKForge" ]]; then
             configuration="Release"
             signing_args=(
               -p:AndroidKeyStore=true
@@ -62,11 +78,11 @@ jobs:
       - name: Locate APK
         id: apk
         run: |
-          apk=$(find src/PKForge.App/bin -name '*-Signed.apk' | head -1)
+          apk=$(find src/PKForge.App/bin -name '*-Signed.apk' -o -name '*.apk' | head -1)
           echo "path=$apk" >> "$GITHUB_OUTPUT"
           echo "name=PKForge-${GITHUB_REF_NAME}.apk" >> "$GITHUB_OUTPUT"
       - name: Verify permanent release signature
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' && github.repository == 'sofianeelhor/PKForge'
         run: |
           expected="E2:6F:3F:FF:8A:89:00:D8:5E:D8:EF:72:E1:CA:7F:50:33:D2:A5:57:98:0B:26:19:F1:1D:6D:E2:10:09:BF:D8"
           actual=$(keytool -printcert -jarfile "${{ steps.apk.outputs.path }}" | tr -d '\r' | grep -m1 'SHA256:')
@@ -81,9 +97,58 @@ jobs:
       - name: Stage release asset
         if: github.ref_type == 'tag'
         run: cp "${{ steps.apk.outputs.path }}" "PKForge-${GITHUB_REF_NAME}.apk"
-      - name: Release
+      - name: Release Android APK
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           files: PKForge-${{ github.ref_name }}.apk
+          generate_release_notes: true
+
+  linux:
+    needs: test
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.x
+          dotnet-quality: preview
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
+      - name: Install MAUI Android workload
+        run: dotnet workload install maui-android
+      - name: Restore
+        run: dotnet restore PKForge.sln
+      - name: Build and package Linux desktop packages
+        run: |
+          version="3.1.0"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          ./tools/Packaging/package.sh "$version" "${{ github.repository }}"
+      - uses: actions/upload-artifact@v4
+        if: github.ref_type != 'tag'
+        with:
+          name: pkforge-linux-packages
+          path: |
+            artifacts/pkforge-*.tar.gz
+            artifacts/pkforge_*.deb
+            artifacts/pkforge-*.rpm
+            artifacts/pkforge-*.pkg.tar.zst
+          retention-days: 3
+      - name: Release Linux Packages
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/pkforge-*.tar.gz
+            artifacts/pkforge_*.deb
+            artifacts/pkforge-*.rpm
+            artifacts/pkforge-*.pkg.tar.zst
           generate_release_notes: true
