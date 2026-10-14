@@ -58,6 +58,18 @@ public sealed class EmulatorSaveHeuristicsTests
     }
 
     [Fact]
+    public void GuessesLegendsArceusFromBothTitleIdsAndAccountLayout()
+    {
+        var oldLayout = "primary:nand/user/save/0000000000000000/uid/01001F5010B28000/main";
+        var officialId = "primary:nand/user/save/0000000000000000/uid/01001F5010DFA000/main";
+        var accountLayout = "primary:account/12345678123456781234567812345678/01001F5010DFA000/0/main";
+
+        Assert.Equal("Legends: Arceus", EmulatorSaveHeuristics.GuessSwitchGameLabel(oldLayout));
+        Assert.Equal("Legends: Arceus", EmulatorSaveHeuristics.GuessSwitchGameLabel(officialId));
+        Assert.Equal("Legends: Arceus", EmulatorSaveHeuristics.GuessSwitchGameLabel(accountLayout));
+    }
+
+    [Fact]
     public void UnknownTitleFallsBack() =>
         Assert.Equal("Switch save", EmulatorSaveHeuristics.GuessSwitchGameLabel("a/b/DEADBEEF/main"));
 

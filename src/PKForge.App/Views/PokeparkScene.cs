@@ -216,7 +216,7 @@ public sealed class PokeparkScene(ISpriteService sprites, PokeparkSpriteService 
                     // frame to its alpha bounds destroys that anchor and causes jitter.
                     var scale = Math.Min(2.8f, Math.Min(42 / source.Width, 42 / source.Height)) * SizeFactor(mon.Species);
                     var w = source.Width * scale; var h = source.Height * scale;
-                    c.DrawBitmap(bitmap, source, new SKRect(pos.X - w / 2, pos.Y - h, pos.X + w / 2, pos.Y), p);
+                    c.DrawBitmap(bitmap, source, new SKRect(pos.X - w / 2, pos.Y - h, pos.X + w / 2, pos.Y), SKSamplingOptions.Default, p);
                 }
                 else
                 {
@@ -224,7 +224,7 @@ public sealed class PokeparkScene(ISpriteService sprites, PokeparkSpriteService 
                     var scale = Math.Min(2.8f, Math.Min(42 / source.Width, 42 / source.Height)) * SizeFactor(mon.Species);
                     var w = source.Width * scale; var h = source.Height * scale;
                     var bob = moving ? (float)Math.Sin(time / 140d + i) * 1.2f : 0;
-                    c.DrawBitmap(bitmap, source, new SKRect(pos.X - w / 2, pos.Y - h + bob, pos.X + w / 2, pos.Y + bob), p);
+                    c.DrawBitmap(bitmap, source, new SKRect(pos.X - w / 2, pos.Y - h + bob, pos.X + w / 2, pos.Y + bob), SKSamplingOptions.Default, p);
                 }
             }
             else
@@ -278,7 +278,7 @@ public sealed class PokeparkScene(ISpriteService sprites, PokeparkSpriteService 
         lock (_environmentGate) _environment.TryGetValue(asset, out bitmap);
         if (bitmap is null) return; // loading frame keeps paint non-blocking
         paint.Color = SKColors.White;
-        canvas.DrawBitmap(bitmap, new SKRect(0, 0, 480, 270), paint);
+        canvas.DrawBitmap(bitmap, new SKRect(0, 0, 480, 270), SKSamplingOptions.Default, paint);
     }
 
     private void DrawActivity(SKCanvas c, SKPaint p, SKPoint pos, ParkInteraction activity, long time)
@@ -372,7 +372,8 @@ public sealed class PokeparkScene(ISpriteService sprites, PokeparkSpriteService 
         if (kind == 1)
         {
             c.DrawCircle(x - 3, y - 4, 3, p); c.DrawCircle(x + 3, y - 4, 3, p);
-            using var heart = new SKPath(); heart.MoveTo(x - 6, y - 3); heart.LineTo(x, y + 3); heart.LineTo(x + 6, y - 3); heart.Close(); c.DrawPath(heart, p);
+            using var heartBuilder = new SKPathBuilder(); heartBuilder.MoveTo(x - 6, y - 3); heartBuilder.LineTo(x, y + 3); heartBuilder.LineTo(x + 6, y - 3); heartBuilder.Close();
+            using var heart = heartBuilder.Detach(); c.DrawPath(heart, p);
         }
         else
         {

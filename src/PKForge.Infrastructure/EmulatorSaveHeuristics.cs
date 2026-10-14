@@ -22,6 +22,7 @@ public static class EmulatorSaveHeuristics
         ["0100000011D90000"] = "Brilliant Diamond",
         ["010018E011D92000"] = "Shining Pearl",
         ["01001F5010B28000"] = "Legends: Arceus",
+        ["01001F5010DFA000"] = "Legends: Arceus",
         ["0100A3D008C5C000"] = "Scarlet",
         ["01008F6008C5E000"] = "Violet",
         ["0100F43008C44000"] = "Legends: Z-A",
@@ -96,7 +97,7 @@ public static class EmulatorSaveHeuristics
 
     /// <summary>NAND/SD-structured saves are the corruption-prone write path and get extra confirmation.</summary>
     public static bool RequiresExtraCare(EmulatorKind kind) =>
-        kind is EmulatorKind.Azahar or EmulatorKind.CitraMmj or EmulatorKind.Eden;
+        kind is EmulatorKind.Azahar or EmulatorKind.CitraMmj or EmulatorKind.Eden or EmulatorKind.Ryujinx;
 
     /// <summary>Newest-first, deduplicated by document id (Eden roots and pinned files can overlap).</summary>
     public static List<DetectedSave> Normalize(IEnumerable<DetectedSave> saves)

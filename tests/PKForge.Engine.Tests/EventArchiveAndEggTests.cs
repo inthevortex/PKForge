@@ -5,6 +5,7 @@ using Xunit;
 
 namespace PKForge.Engine.Tests;
 
+[Collection(nameof(MysteryGiftDatabaseCollection))]
 public sealed class EventArchiveAndEggTests
 {
     [Fact]

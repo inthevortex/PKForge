@@ -93,14 +93,22 @@ public sealed class AndroidFolderFileAccess : IFolderFileAccess
         using var cursor = Resolver.Query(childrenUri, projection, null, null, null);
         if (cursor is null) return [];
 
+        // Disposing only releases the managed peer; the Java cursor stays open until Close.
         var children = new List<Child>();
-        while (cursor.MoveToNext())
+        try
         {
-            var docId = cursor.GetString(0);
-            var name = cursor.GetString(1);
-            if (docId is null || name is null) continue;
-            if (cursor.GetString(2) == DocumentsContract.Document.MimeTypeDir) continue;
-            children.Add(new Child(docId, name));
+            while (cursor.MoveToNext())
+            {
+                var docId = cursor.GetString(0);
+                var name = cursor.GetString(1);
+                if (docId is null || name is null) continue;
+                if (cursor.GetString(2) == DocumentsContract.Document.MimeTypeDir) continue;
+                children.Add(new Child(docId, name));
+            }
+        }
+        finally
+        {
+            cursor.Close();
         }
         return children;
     }

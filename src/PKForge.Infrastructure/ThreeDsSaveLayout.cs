@@ -115,15 +115,20 @@ public static class ThreeDsSaveLayout
         Func<TNode, IEnumerable<TreeEntry<TNode>>> list, Action<string>? trace, CancellationToken cancellationToken)
         where TNode : class
     {
-        if (MainOf(root, list) is { } game)
+        var rootSaves = SavesOf(root, list).ToList();
+        if (rootSaves.Count > 0)
         {
             trace?.Invoke("3DS layout: the grant is one game's folder");
-            return [new ThreeDsSaveHit<TNode>(game, rootName)];
+            return rootSaves.Select(save => new ThreeDsSaveHit<TNode>(save, rootName));
         }
-        if (Same(rootName, "data") && Child(root, "00000001", list) is { } slot && MainIn(slot, list) is { } main)
+        if (Same(rootName, "data") && Child(root, "00000001", list) is { } slot)
         {
-            trace?.Invoke("3DS layout: the grant is one game's data folder");
-            return [new ThreeDsSaveHit<TNode>(main, "unknown")];
+            var dataSaves = SavesIn(slot, list).ToList();
+            if (dataSaves.Count > 0)
+            {
+                trace?.Invoke("3DS layout: the grant is one game's data folder");
+                return dataSaves.Select(save => new ThreeDsSaveHit<TNode>(save, "unknown"));
+            }
         }
         if (Same(rootName, "00040000")) return Games(root, list, cancellationToken);
         if (Child(root, "00040000", list) is { } retail) return Games(retail, list, cancellationToken);
@@ -153,27 +158,33 @@ public static class ThreeDsSaveLayout
         return retail is null ? [] : Games(retail, list, cancellationToken);
     }
 
-    /// <summary>Retail titles live under 00040000/&lt;game&gt;/data/00000001/main.</summary>
+    /// <summary>Retail and Virtual Console titles live under 00040000/&lt;game&gt;/data/00000001/(main | sav.dat).</summary>
     private static IEnumerable<ThreeDsSaveHit<TNode>> Games<TNode>(TNode retail, Func<TNode, IEnumerable<TreeEntry<TNode>>> list,
         CancellationToken cancellationToken) where TNode : class
     {
         foreach (var game in list(retail).Where(x => x.IsDirectory))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (MainOf(game.Node, list) is { } main)
-                yield return new ThreeDsSaveHit<TNode>(main, game.Name);
+            foreach (var save in SavesOf(game.Node, list))
+                yield return new ThreeDsSaveHit<TNode>(save, game.Name);
         }
     }
 
-    private static TNode? MainOf<TNode>(TNode game, Func<TNode, IEnumerable<TreeEntry<TNode>>> list) where TNode : class
+    private static IEnumerable<TNode> SavesOf<TNode>(TNode game, Func<TNode, IEnumerable<TreeEntry<TNode>>> list) where TNode : class
     {
         var data = Child(game, "data", list);
         var slot = data is null ? null : Child(data, "00000001", list);
-        return slot is null ? null : MainIn(slot, list);
+        return slot is null ? [] : SavesIn(slot, list);
     }
 
+    private static IEnumerable<TNode> SavesIn<TNode>(TNode slot, Func<TNode, IEnumerable<TreeEntry<TNode>>> list) where TNode : class =>
+        list(slot).Where(x => !x.IsDirectory && (Same(x.Name, "main") || Same(x.Name, "sav.dat"))).Select(x => x.Node);
+
+    private static TNode? MainOf<TNode>(TNode game, Func<TNode, IEnumerable<TreeEntry<TNode>>> list) where TNode : class =>
+        SavesOf(game, list).FirstOrDefault();
+
     private static TNode? MainIn<TNode>(TNode slot, Func<TNode, IEnumerable<TreeEntry<TNode>>> list) where TNode : class =>
-        list(slot).FirstOrDefault(x => !x.IsDirectory && Same(x.Name, "main")).Node;
+        SavesIn(slot, list).FirstOrDefault();
 
     private static TNode? Child<TNode>(TNode parent, string name, Func<TNode, IEnumerable<TreeEntry<TNode>>> list)
         where TNode : class =>

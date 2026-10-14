@@ -177,24 +177,25 @@ public static class PartyView
         var g = Grid(info);
         var spine = g.Margin + g.Width + g.GapX / 2;
         using var paint = new SKPaint { Color = Trace, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 4, StrokeJoin = SKStrokeJoin.Round };
-        using var path = new SKPath();
+        using var builder = new SKPathBuilder();
         for (var row = 0; row < Rows; row++)
         {
             var left = SlotRect(info, row * 2);
             var right = SlotRect(info, row * 2 + 1);
             var yLeft = left.MidY - left.Height * 0.12f;
             var yRight = right.MidY + right.Height * 0.12f;
-            path.MoveTo(left.Right - 6, yLeft);
-            path.LineTo(spine, yLeft);
-            path.LineTo(spine, yRight);
-            path.LineTo(right.Left + 6, yRight);
+            builder.MoveTo(left.Right - 6, yLeft);
+            builder.LineTo(spine, yLeft);
+            builder.LineTo(spine, yRight);
+            builder.LineTo(right.Left + 6, yRight);
             if (row < Rows - 1)
             {
                 var nextLeft = SlotRect(info, row * 2 + 2);
-                path.MoveTo(spine, yRight);
-                path.LineTo(spine, nextLeft.MidY - nextLeft.Height * 0.12f);
+                builder.MoveTo(spine, yRight);
+                builder.LineTo(spine, nextLeft.MidY - nextLeft.Height * 0.12f);
             }
         }
+        using var path = builder.Detach();
         canvas.DrawPath(path, paint);
     }
 
@@ -224,21 +225,32 @@ public static class PartyView
 
         // The box sprite in the panel's top-left corner, the status tag under it.
         var spriteArea = SKRect.Create(r.Left + 14 * unit, r.Top + 4 * unit, 100 * unit, 88 * unit);
-        var bitmap = sprites.GetSprite(detail!.Look);
-        if (bitmap is not null)
+        var look = detail!.Look;
+        SKImage? render = null;
+        // While a HOME render is on its way nothing is drawn, so no pixel sprite flashes first.
+        var homePending = HomeRender.Active && !HomeRender.TryGet(canvas, sprites, look, spriteArea.Height, invalidate, out render);
+        using var tint = new SKPaint();
+        if (fainted) tint.ColorFilter = SKColorFilter.CreateBlendMode(new SKColor(0x70, 0x50, 0x48), SKBlendMode.SrcIn);
+        if (render is not null)
         {
-            var scale = MathF.Max(1f, MathF.Floor(MathF.Min(spriteArea.Width / bitmap.Width, spriteArea.Height / bitmap.Height) * 2f) / 2f);
-            var w = bitmap.Width * scale;
-            var h = bitmap.Height * scale;
-            using var paint = new SKPaint();
-            if (fainted) paint.ColorFilter = SKColorFilter.CreateBlendMode(new SKColor(0x70, 0x50, 0x48), SKBlendMode.SrcIn);
-            using var image = SKImage.FromBitmap(bitmap);
-            canvas.DrawImage(image, new SKRect(spriteArea.MidX - w / 2, spriteArea.Bottom - h, spriteArea.MidX + w / 2, spriteArea.Bottom),
-                new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None), paint);
+            HomeRender.DrawStanding(canvas, render, spriteArea.Height, spriteArea.MidX, spriteArea.Bottom, tint);
         }
-        else
+        else if (!homePending)
         {
-            sprites.Warm(detail.Look, invalidate);
+            var bitmap = sprites.GetSprite(look);
+            if (bitmap is not null)
+            {
+                var scale = MathF.Max(1f, MathF.Floor(MathF.Min(spriteArea.Width / bitmap.Width, spriteArea.Height / bitmap.Height) * 2f) / 2f);
+                var w = bitmap.Width * scale;
+                var h = bitmap.Height * scale;
+                using var image = SKImage.FromBitmap(bitmap);
+                canvas.DrawImage(image, new SKRect(spriteArea.MidX - w / 2, spriteArea.Bottom - h, spriteArea.MidX + w / 2, spriteArea.Bottom),
+                    new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None), tint);
+            }
+            else
+            {
+                sprites.Warm(look, invalidate);
+            }
         }
         if (detail.IsShiny)
             DrawShinyStar(canvas, new SKPoint(spriteArea.Right - 6 * unit, r.Top + 22 * unit), 11 * unit);
@@ -311,17 +323,17 @@ public static class PartyView
     {
         var o = SKRect.Inflate(r, -shrink, -shrink);
         var k = r.Height * 0.2f - shrink * 0.4f;
-        var path = new SKPath();
-        path.MoveTo(o.Left + k, o.Top);
-        path.LineTo(o.Right - k, o.Top);
-        path.LineTo(o.Right, o.Top + k);
-        path.LineTo(o.Right, o.Bottom - k);
-        path.LineTo(o.Right - k, o.Bottom);
-        path.LineTo(o.Left + k, o.Bottom);
-        path.LineTo(o.Left, o.Bottom - k);
-        path.LineTo(o.Left, o.Top + k);
-        path.Close();
-        return path;
+        using var builder = new SKPathBuilder();
+        builder.MoveTo(o.Left + k, o.Top);
+        builder.LineTo(o.Right - k, o.Top);
+        builder.LineTo(o.Right, o.Top + k);
+        builder.LineTo(o.Right, o.Bottom - k);
+        builder.LineTo(o.Right - k, o.Bottom);
+        builder.LineTo(o.Left + k, o.Bottom);
+        builder.LineTo(o.Left, o.Bottom - k);
+        builder.LineTo(o.Left, o.Top + k);
+        builder.Close();
+        return builder.Detach();
     }
 
     /// <summary>A dark outer line, the bright cyan rim, then the body with its one light
@@ -340,14 +352,15 @@ public static class PartyView
         canvas.Save();
         canvas.ClipPath(inner, antialias: true);
         using (var light = new SKPaint { Color = band, IsAntialias = true })
-        using (var stripe = new SKPath())
+        using (var stripeBuilder = new SKPathBuilder())
         {
             var x0 = r.Left + r.Width * 0.55f;
-            stripe.MoveTo(x0, r.Bottom);
-            stripe.LineTo(x0 + r.Height * 0.9f, r.Top);
-            stripe.LineTo(x0 + r.Height * 0.9f + r.Width * 0.16f, r.Top);
-            stripe.LineTo(x0 + r.Width * 0.16f, r.Bottom);
-            stripe.Close();
+            stripeBuilder.MoveTo(x0, r.Bottom);
+            stripeBuilder.LineTo(x0 + r.Height * 0.9f, r.Top);
+            stripeBuilder.LineTo(x0 + r.Height * 0.9f + r.Width * 0.16f, r.Top);
+            stripeBuilder.LineTo(x0 + r.Width * 0.16f, r.Bottom);
+            stripeBuilder.Close();
+            using var stripe = stripeBuilder.Detach();
             canvas.DrawPath(stripe, light);
         }
         canvas.Restore();
@@ -367,15 +380,16 @@ public static class PartyView
 
     private static void DrawShinyStar(SKCanvas canvas, SKPoint c, float r)
     {
-        using var path = new SKPath();
+        using var builder = new SKPathBuilder();
         for (var k = 0; k < 10; k++)
         {
             var a = MathF.PI / 5 * k - MathF.PI / 2;
             var rr = k % 2 == 0 ? r : r * 0.45f;
             var p = new SKPoint(c.X + rr * MathF.Cos(a), c.Y + rr * MathF.Sin(a));
-            if (k == 0) path.MoveTo(p); else path.LineTo(p);
+            if (k == 0) builder.MoveTo(p); else builder.LineTo(p);
         }
-        path.Close();
+        builder.Close();
+        using var path = builder.Detach();
         using var fill = new SKPaint { Color = Pksm.ShinyGold, IsAntialias = true };
         canvas.DrawPath(path, fill);
     }

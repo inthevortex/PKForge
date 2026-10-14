@@ -50,7 +50,7 @@ public sealed class PokeparkResidentCard : IPadHandler
             var scale = Math.Min(w * .72f / source.Width, h * .8f / source.Height);
             var dw = source.Width * scale; var dh = source.Height * scale;
             paint.Color = SKColors.White;
-            canvas.DrawBitmap(bitmap, source, SKRect.Create((w - dw) / 2, (h - dh) / 2, dw, dh), paint);
+            canvas.DrawBitmap(bitmap, source, SKRect.Create((w - dw) / 2, (h - dh) / 2, dw, dh), SKSamplingOptions.Default, paint);
         };
         void Repaint() => MainThread.BeginInvokeOnMainThread(() => { if (!_closed) portrait.InvalidateSurface(); });
         sprites.Warm(mon.Species, mon.Form, mon.Shiny, Repaint);

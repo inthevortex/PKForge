@@ -124,7 +124,7 @@ public sealed class EventFlagsEditor : IPadHandler
             LineBreakMode = LineBreakMode.TailTruncation, HorizontalTextAlignment = TextAlignment.Center,
         };
         var hints = Kit.WindowHints(("A", "Change", () => { if (Current is { } row) _ = ActivateAsync(row); }),
-            ("L", "R  Section", () => Page(1)), ("B", "Close", Close));
+            ("LR", "Section", () => Page(1)), ("B", "Close", Close));
 
         var body = new Grid { Children = { _list, _empty } };
         var content = new Grid

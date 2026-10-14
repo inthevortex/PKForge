@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0-android</TargetFramework>
+    <TargetFrameworks>net11.0-android;net11.0</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <RootNamespace>PKForge.App</RootNamespace>
-    <UseMaui>true</UseMaui>
-    <SingleProject>true</SingleProject>
+    <UseMaui Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">true</UseMaui>
+    <SingleProject Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">true</SingleProject>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -12,8 +12,23 @@
     <ApplicationTitle>PKForge</ApplicationTitle>
     <ApplicationVersion>310</ApplicationVersion>
     <ApplicationDisplayVersion>3.1.0</ApplicationDisplayVersion>
-    <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifiers Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">android-arm64</RuntimeIdentifiers>
+    <PKForgeUpdateRepository Condition="'$(PKForgeUpdateRepository)' == ''">sofianeelhor/PKForge</PKForgeUpdateRepository>
   </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="PKForgeUpdateRepository" Value="$(PKForgeUpdateRepository)" />
+  </ItemGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net11.0'">
+    <AssemblyName>PKForge</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants>$(DefineConstants);PKFORGE_DESKTOP</DefineConstants>
+    <AvaloniaControlsMauiGenerateDesktopProgram>false</AvaloniaControlsMauiGenerateDesktopProgram>
+    <!-- The desktop head has no MAUI SDK to stamp the app version, so it rides on the assembly version. -->
+    <Version>$(ApplicationDisplayVersion)</Version>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net11.0'">
+    <AssemblyMetadata Include="ApplicationVersion" Value="$(ApplicationVersion)" />
+  </ItemGroup>
   <PropertyGroup Condition="'$(DiagnosticBuild)' == 'true'">
     <!-- Diagnostic builds install beside production and cannot overwrite its app-private data. -->
     <ApplicationId>org.pkforge.app.debug</ApplicationId>
@@ -27,17 +42,41 @@
          APK entries are stored, never ZIP-compressed. -->
     <AndroidStoreUncompressedFileExtensions>.so;$(AndroidStoreUncompressedFileExtensions)</AndroidStoreUncompressedFileExtensions>
   </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.20" />
+
+  <!-- Package references per target framework -->
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <PackageReference Include="Microsoft.Maui.Controls" Version="11.0.0-rc.1.26451.6" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
-    <PackageReference Include="SkiaSharp.Views.Maui.Controls" Version="3.116.1" />
+    <PackageReference Include="SkiaSharp.Views.Maui.Controls" Version="4.151.0" />
     <PackageReference Include="ZXing.Net" Version="0.16.10" />
   </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net11.0'">
+    <PackageReference Include="Avalonia.Controls.Maui" Version="11.0.0-rc.1.26252.343" />
+    <PackageReference Include="Avalonia.Controls.Maui.Desktop" Version="11.0.0-rc.1.26252.343" />
+    <PackageReference Include="Avalonia.Controls.Maui.Essentials" Version="11.0.0-rc.1.26252.343" />
+    <PackageReference Include="Avalonia.Controls.Maui.SkiaSharp.Views" Version="11.0.0-rc.1.26252.343" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="ZXing.Net" Version="0.16.10" />
+    <PackageReference Include="ppy.SDL3-CS" Version="2026.1002.1" />
+    <PackageReference Include="ppy.SDL3_mixer-CS" Version="2026.1002.1" />
+  </ItemGroup>
+
+  <!-- Platform source file separation -->
   <ItemGroup>
+    <Compile Remove="Platforms/Desktop/**" Condition="'$(TargetFramework)' != 'net11.0'" />
+    <Compile Remove="Platforms/Android/**" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != 'android'" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
     <AndroidLinkDescription Include="Platforms/Android/linker.xml" />
+  </ItemGroup>
+  <ItemGroup>
     <MauiIcon Include="Resources/AppIcon/pkforge.png" Color="#14121D" />
     <MauiSplashScreen Include="Resources/Splash/splash.png" Color="#14121D" BaseSize="180,180" />
     <MauiFont Include="Resources/Fonts/*.ttf" />
+    <!-- Avalonia embeds MauiFont items under Assets/Fonts/; also place them at the package root,
+         where Android packages them, so Skia painters open them by bare name on both heads. -->
+    <MauiAsset Include="Resources/Fonts/*.ttf" LogicalName="%(Filename)%(Extension)" Condition="'$(TargetFramework)' == 'net11.0'" />
   </ItemGroup>
   <ItemGroup>
     <!-- Bundled fallback sprites from pristine PKHeX submodule (always offline-available). -->
@@ -45,8 +84,10 @@
     <MauiAsset Include="Resources/AppIcon/pkforge.png" LogicalName="ui/logo.png" />
     <!-- The logo in each color scheme's colors, named by scheme id. -->
     <MauiAsset Include="Resources/UI/logo/*.png" LogicalName="ui/logo/%(Filename)%(Extension)" />
-    <!-- The About screen's easter egg. -->
-    <MauiAsset Include="Resources/BadApple/*" LogicalName="badapple/%(Filename)%(Extension)" />
+    <!-- The About screen's easter egg. Android plays the AAC track through MediaPlayer, desktop the Vorbis one through SDL_mixer. -->
+    <MauiAsset Include="Resources/BadApple/frames.bin" LogicalName="badapple/%(Filename)%(Extension)" />
+    <MauiAsset Include="Resources/BadApple/audio.m4a" LogicalName="badapple/%(Filename)%(Extension)" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'" />
+    <MauiAsset Include="Resources/BadApple/audio.ogg" LogicalName="badapple/%(Filename)%(Extension)" Condition="'$(TargetFramework)' == 'net11.0'" />
     <MauiAsset Include="Resources/Events/*.bin.gz" LogicalName="events/%(Filename)%(Extension)" />
     <MauiAsset Include="../../external/PKHeX/PKHeX.Drawing.PokeSprite/Resources/img/Big Pokemon Sprites/*.png" LogicalName="sprites/%(Filename)%(Extension)" />
     <MauiAsset Include="../../external/PKHeX/PKHeX.Drawing.PokeSprite/Resources/img/Big Shiny Sprites/*.png" LogicalName="sprites/%(Filename)%(Extension)" />
@@ -65,9 +106,7 @@
          Tauros, the Legends: Z-A megas, Urshifu Rapid Strike, ... and the sprite resolver
          (SpriteCatalog) shows the exact form's artwork before ever falling back to the
          base form. Overlaps with a_9*/a_10* are the same files under the same name. -->
-    <MauiAsset Include="../../external/PKHeX/PKHeX.Drawing.PokeSprite/Resources/img/Artwork Pokemon Sprites/a_*-*.png"
-               Exclude="../../external/PKHeX/PKHeX.Drawing.PokeSprite/Resources/img/Artwork Pokemon Sprites/a_9*.png;../../external/PKHeX/PKHeX.Drawing.PokeSprite/Resources/img/Artwork Pokemon Sprites/a_10*.png"
-               LogicalName="artwork/%(Filename)%(Extension)" />
+    <MauiAsset Include="../../external/PKHeX/PKHeX.Drawing.PokeSprite/Resources/img/Artwork Pokemon Sprites/a_*-*.png" Exclude="../../external/PKHeX/PKHeX.Drawing.PokeSprite/Resources/img/Artwork Pokemon Sprites/a_9*.png;../../external/PKHeX/PKHeX.Drawing.PokeSprite/Resources/img/Artwork Pokemon Sprites/a_10*.png" LogicalName="artwork/%(Filename)%(Extension)" />
     <MauiAsset Include="../../external/PKHeX/PKHeX.Drawing.PokeSprite/Resources/img/ball/*.png" LogicalName="balls/%(Filename)%(Extension)" />
     <!-- PKHeX's complete, format-accurate ribbon/mark artwork (GPL-3). -->
     <MauiAsset Include="../../external/PKHeX/PKHeX.Drawing.Misc/Resources/img/ribbons/*.png" LogicalName="ribbons/%(Filename)%(Extension)" />
@@ -91,4 +130,8 @@
     <ProjectReference Include="../PKForge.Engine/PKForge.Engine.csproj" />
     <ProjectReference Include="../PKForge.Infrastructure/PKForge.Infrastructure.csproj" />
   </ItemGroup>
+
+  <!-- Hook MauiAsset conversion before AddAvaloniaResources on desktop so embedded resources are registered -->
+  <Target Name="HookMauiAssetsToAvalonia" BeforeTargets="AddAvaloniaResources" DependsOnTargets="ConvertMauiAssetsToAvaloniaResources" Condition="'$(TargetFramework)' == 'net11.0'" />
+
 </Project>

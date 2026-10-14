@@ -12,8 +12,8 @@ public sealed class App : Application
         base.OnSleep();
     }
 
-    private static Platforms.Android.MusicPlayer? Music =>
-        IPlatformApplication.Current?.Services.GetService<Domain.IMusicPlayer>() as Platforms.Android.MusicPlayer;
+    private static Domain.IMusicPlayer? Music =>
+        IPlatformApplication.Current?.Services.GetService<Domain.IMusicPlayer>();
 
     /// <summary>The user's optional default background music starts with the app, once.</summary>
     protected override void OnStart()
@@ -25,6 +25,18 @@ public sealed class App : Application
     protected override void OnResume()
     {
         base.OnResume();
+        Music?.ResumeFromBackground();
+        Resumed?.Invoke();
+    }
+
+    public static void RaiseSuspended()
+    {
+        Suspended?.Invoke();
+        Music?.PauseForBackground();
+    }
+
+    public static void RaiseResumed()
+    {
         Music?.ResumeFromBackground();
         Resumed?.Invoke();
     }
@@ -55,6 +67,8 @@ public sealed class App : Application
     {
 #if ANDROID
         Android.Util.Log.Info("PKForgeBoot", message);
+#else
+        Console.WriteLine($"[PKForgeBoot] {message}");
 #endif
     }
 
@@ -71,14 +85,18 @@ public sealed class App : Application
     }
 
     /// <summary>
-    /// Builds Home and the lower screen again after a color scheme change: pages take their
-    /// colors when they are built. Called from Home's settings, so Home is the only page open.
+    /// Builds Home and the lower screen again: pages take their colors and, on desktop, their
+    /// mockup-sized lengths when they are built. Called after a color scheme or UI size change
+    /// from Home's settings, or on desktop after a resize once Home is idle.
     /// </summary>
     internal async Task ReloadForThemeAsync()
     {
         var services = IPlatformApplication.Current?.Services;
         if (services is null || Windows.Count == 0) return;
         Windows[0].Page = CreateRoot(services);
+#if PKFORGE_DESKTOP
+        Platforms.Desktop.DesktopRelayout.Rebuilt();
+#endif
         var host = services.GetService<PKForge.Domain.ISecondaryDisplayHost>();
         if (host is null || Services.SecondScreenMode.UserOff) return;
         try
@@ -92,6 +110,24 @@ public sealed class App : Application
         }
     }
 
+#if PKFORGE_DESKTOP
+    /// <summary>
+    /// True while Home is the only page open, with no menu or dialog over it and nothing in
+    /// progress, so rebuilding it loses nothing the player is looking at and no flow carries
+    /// on against the old page.
+    /// </summary>
+    internal bool IsHomeIdle()
+    {
+        if (Windows.Count == 0 || Windows[0].Page is not NavigationPage root) return false;
+        var navigation = root.Navigation;
+        if (navigation.NavigationStack.Count != 1 || navigation.ModalStack.Count != 0) return false;
+        if (root.CurrentPage is not Views.HomePage home || home.IsFlowRunning) return false;
+        var services = IPlatformApplication.Current?.Services;
+        if (services?.GetService<ViewModels.SavePickerViewModel>()?.IsBusy != false) return false;
+        return services.GetService<Services.GamepadRouter>()?.IsTop(home) == true;
+    }
+#endif
+
     protected override Window CreateWindow(IActivationState? activationState)
     {
         Trace("CreateWindow enter");
@@ -100,7 +136,18 @@ public sealed class App : Application
         {
             var services = IPlatformApplication.Current?.Services
                 ?? throw new InvalidOperationException("MAUI services are unavailable.");
-            return new Window(CreateRoot(services));
+            var root = CreateRoot(services);
+#if PKFORGE_DESKTOP
+            var (initW, initH) = GetInitialDesktopWindowSize();
+#endif
+            return new Window(root)
+            {
+                Title = "PKForge",
+#if PKFORGE_DESKTOP
+                Width = initW,
+                Height = initH,
+#endif
+            };
         }
         catch (Exception error)
         {
@@ -117,7 +164,39 @@ public sealed class App : Application
                         Margin = new Thickness(20),
                     },
                 },
-            });
+            })
+            {
+                Title = "PKForge Error",
+#if PKFORGE_DESKTOP
+                Width = 1280,
+                Height = 800,
+#endif
+            };
         }
     }
+
+#if PKFORGE_DESKTOP
+    private static (double Width, double Height) GetInitialDesktopWindowSize()
+    {
+        try
+        {
+            var display = Microsoft.Maui.Devices.DeviceDisplay.MainDisplayInfo;
+            if (display.Width > 0 && display.Height > 0)
+            {
+                double density = display.Density > 0 ? display.Density : 1.0;
+                double availW = display.Width / density;
+                double availH = display.Height / density;
+                if (availW <= 1280 || availH <= 800)
+                {
+                    return (Math.Min(1280, availW), Math.Min(800, availH));
+                }
+                return (Math.Min(1920, availW), Math.Min(1080, availH));
+            }
+        }
+        catch
+        {
+        }
+        return (1280, 800);
+    }
+#endif
 }

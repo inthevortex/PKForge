@@ -45,6 +45,7 @@ public sealed class HexEditorPage : IPadHandler
     private readonly byte[] _bytes; // the Serialize() truth this editor works on
     private readonly SortedDictionary<int, byte> _edits = []; // offset → staged value
     private readonly SKCanvasView _canvas;
+    private readonly WheelSteps _wheel = new();
     private readonly Label _title;
     private readonly Label _progress;
     private readonly Label _cursorInfo;
@@ -226,6 +227,12 @@ public sealed class HexEditorPage : IPadHandler
 
     private void Touch(object? sender, SKTouchEventArgs args)
     {
+        if (args.ActionType == SKTouchAction.WheelChanged)
+        {
+            args.Handled = true;
+            if (_wheel.Add(args.WheelDelta) is var steps and not 0) Move(steps * Columns);
+            return;
+        }
         if (args.ActionType == SKTouchAction.Pressed) { args.Handled = true; return; }
         if (args.ActionType != SKTouchAction.Released) return;
         args.Handled = true;

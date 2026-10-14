@@ -92,13 +92,11 @@ public static class BankEntryEditor
     /// <summary>Held-item list with sprites for anything already cached (misses show name only).</summary>
     private static List<PickItem> ItemIcons(IReadOnlyList<string> names)
     {
-        var directory = System.IO.Path.Combine(FileSystem.AppDataDirectory, "items");
         var items = new List<PickItem> { new(0, "(none)") };
         for (var id = 1; id < names.Count; id++)
         {
             if (names[id].Length == 0) continue;
-            var cached = System.IO.Path.Combine(directory, ItemArt.Slug(names[id]) + ".png");
-            items.Add(new PickItem(id, names[id], File.Exists(cached) ? cached : null));
+            items.Add(new PickItem(id, names[id], ItemArt.CachedPathOrNull(names[id])));
         }
         return items;
     }

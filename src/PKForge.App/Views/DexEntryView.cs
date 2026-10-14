@@ -72,13 +72,14 @@ public sealed class DexEntryView : SKCanvasView
         // The name banner, run off the left edge like the summary's.
         using (var frame = new SKPaint { Color = ColorTheme.Current.NameFrame, IsAntialias = true })
             c.DrawRoundRect(new SKRect(-40, 10, 600, 104), 26, 26, frame);
-        using (var banner = new SKPath())
+        using (var bannerBuilder = new SKPathBuilder())
         {
-            banner.MoveTo(-40, 34);
-            banner.LineTo(530, 34);
-            banner.LineTo(570, 118);
-            banner.LineTo(-40, 118);
-            banner.Close();
+            bannerBuilder.MoveTo(-40, 34);
+            bannerBuilder.LineTo(530, 34);
+            bannerBuilder.LineTo(570, 118);
+            bannerBuilder.LineTo(-40, 118);
+            bannerBuilder.Close();
+            using var banner = bannerBuilder.Detach();
             using var fill = new SKPaint
             {
                 IsAntialias = true,
@@ -115,16 +116,17 @@ public sealed class DexEntryView : SKCanvasView
         using (var fill = new SKPaint { Color = ColorTheme.Current.CardFill, IsAntialias = true }) c.DrawRoundRect(card, 28, 28, fill);
         using (var rim = new SKPaint { Color = ColorTheme.Current.LabelInk, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 3 })
             c.DrawRoundRect(SKRect.Inflate(card, -1.5f, -1.5f), 28, 28, rim);
-        using (var tab = new SKPath())
+        using (var tabBuilder = new SKPathBuilder())
         {
-            tab.MoveTo(48, cardTop);
-            tab.LineTo(384, cardTop);
-            tab.LineTo(420, cardTop + 78);
-            tab.LineTo(48, cardTop + 78);
-            tab.ArcTo(new SKRect(24, cardTop + 30, 72, cardTop + 78), 90, 90, false);
-            tab.LineTo(24, cardTop + 24);
-            tab.ArcTo(new SKRect(24, cardTop, 72, cardTop + 48), 180, 90, false);
-            tab.Close();
+            tabBuilder.MoveTo(48, cardTop);
+            tabBuilder.LineTo(384, cardTop);
+            tabBuilder.LineTo(420, cardTop + 78);
+            tabBuilder.LineTo(48, cardTop + 78);
+            tabBuilder.ArcTo(new SKRect(24, cardTop + 30, 72, cardTop + 78), 90, 90, false);
+            tabBuilder.LineTo(24, cardTop + 24);
+            tabBuilder.ArcTo(new SKRect(24, cardTop, 72, cardTop + 48), 180, 90, false);
+            tabBuilder.Close();
+            using var tab = tabBuilder.Detach();
             using var fill = new SKPaint { Color = ColorTheme.Current.SpeciesFill, IsAntialias = true };
             c.DrawPath(tab, fill);
             using var rim = new SKPaint { Color = ColorTheme.Current.SpeciesEdge, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 3 };

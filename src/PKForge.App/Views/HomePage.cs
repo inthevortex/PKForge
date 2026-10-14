@@ -13,6 +13,8 @@ namespace PKForge.App.Views;
 public sealed class HomePage : ContentPage, IPadHandler
 {
     private readonly SavePickerViewModel _viewModel;
+    private readonly IAppPlatform _appPlatform;
+    private readonly IEmulatorRootDiscovery _discovery;
     private ScrollView _shelf = null!;
     private HorizontalStackLayout _shelfItems = null!;
     private int _shelfIndex = -1;
@@ -22,9 +24,13 @@ public sealed class HomePage : ContentPage, IPadHandler
     private PokeparkPage? _parkPage;
     private int _parkNavigationPending;
 
-    public HomePage(SavePickerViewModel viewModel)
+    public HomePage(SavePickerViewModel viewModel, IAppPlatform? appPlatform = null, IEmulatorRootDiscovery? discovery = null)
     {
         _viewModel = viewModel;
+        _appPlatform = appPlatform ?? IPlatformApplication.Current?.Services.GetRequiredService<IAppPlatform>()
+            ?? throw new InvalidOperationException("IAppPlatform is unavailable.");
+        _discovery = discovery ?? IPlatformApplication.Current?.Services.GetService<IEmulatorRootDiscovery>()
+            ?? NullEmulatorRootDiscovery.Instance;
         BindingContext = viewModel;
         Title = "PKForge";
         BackgroundColor = UiTokens.Housing;
@@ -144,6 +150,7 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// </summary>
     private static void BlockNativeFocus(View view)
     {
+#if ANDROID
         view.HandlerChanged += (_, _) =>
         {
             if (view.Handler?.PlatformView is Android.Views.View platform)
@@ -152,6 +159,7 @@ public sealed class HomePage : ContentPage, IPadHandler
                 platform.FocusableInTouchMode = false;
             }
         };
+#endif
     }
 
     /// <summary>
@@ -163,6 +171,7 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// </summary>
     private static void AttachPress(View view, Action onTap, Action onLongPress)
     {
+#if ANDROID
         view.HandlerChanged += (_, _) =>
         {
             if (view.Handler?.PlatformView is not Android.Views.View platform) return;
@@ -206,6 +215,79 @@ public sealed class HomePage : ContentPage, IPadHandler
                 e.Handled = true;
             };
         };
+#elif PKFORGE_DESKTOP
+        void HookDesktop(Avalonia.Controls.Control platform)
+        {
+            var token = 0;
+            var pressing = false;
+            Avalonia.Point downPos = default;
+            const double slop = 10;
+            const int timeout = 500;
+
+            platform.PointerPressed += (_, e) =>
+            {
+                var pt = e.GetCurrentPoint(platform);
+                if (pt.Properties.IsRightButtonPressed)
+                {
+                    e.Handled = true;
+                    onLongPress();
+                    return;
+                }
+                if (pt.Properties.IsLeftButtonPressed)
+                {
+                    var pressed = ++token;
+                    pressing = true;
+                    downPos = e.GetPosition(platform);
+                    view.Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(timeout), () =>
+                    {
+                        if (pressed != token || !pressing) return;
+                        pressing = false;
+                        onLongPress();
+                    });
+                    e.Handled = true;
+                }
+            };
+
+            platform.PointerMoved += (_, e) =>
+            {
+                if (!pressing) return;
+                var pos = e.GetPosition(platform);
+                if (Math.Abs(pos.X - downPos.X) > slop || Math.Abs(pos.Y - downPos.Y) > slop)
+                {
+                    pressing = false;
+                    token++;
+                }
+            };
+
+            platform.PointerReleased += (_, e) =>
+            {
+                var wasPressing = pressing;
+                pressing = false;
+                token++;
+                if (wasPressing)
+                {
+                    e.Handled = true;
+                    onTap();
+                }
+            };
+
+            platform.PointerCaptureLost += (_, _) =>
+            {
+                pressing = false;
+                token++;
+            };
+        }
+
+        if (view.Handler?.PlatformView is Avalonia.Controls.Control direct) HookDesktop(direct);
+        view.HandlerChanged += (_, _) =>
+        {
+            if (view.Handler?.PlatformView is Avalonia.Controls.Control platform) HookDesktop(platform);
+        };
+#else
+        var tap = new TapGestureRecognizer();
+        tap.Tapped += (_, _) => onTap();
+        view.GestureRecognizers.Add(tap);
+#endif
     }
 
     // Once per launch, not per page: a color scheme change rebuilds Home, and the new page
@@ -219,6 +301,16 @@ public sealed class HomePage : ContentPage, IPadHandler
 
     /// <summary>The Thor's lower screen is on from launch - the app *is* dual-screen.</summary>
     private SecondScreenClaim? _secondClaim;
+
+    private readonly FlowCounter _flows = new();
+
+    /// <summary>
+    /// True while a Home flow is running: a menu or prompt, or the work between two of them
+    /// (folder discovery, a download, a check), when nothing may be on screen.
+    /// </summary>
+    internal bool IsFlowRunning => _flows.IsRunning;
+
+    private IDisposable BeginFlow() => _flows.Begin();
 
     protected override void OnAppearing()
     {
@@ -277,7 +369,12 @@ public sealed class HomePage : ContentPage, IPadHandler
         if (_pendingAuthorizedUpdate is { } authorized && AppUpdateService.CanInstallUpdates())
         {
             _pendingAuthorizedUpdate = null;
-            Dispatcher.DispatchAsync(async () => await InstallUpdateAsync(authorized));
+            var install = BeginFlow();
+            Dispatcher.DispatchAsync(async () =>
+            {
+                using var _ = install;
+                await InstallUpdateAsync(authorized);
+            });
             return;
         }
 
@@ -285,8 +382,12 @@ public sealed class HomePage : ContentPage, IPadHandler
         if (_viewModel.ShowWizard && !_welcomeShown)
         {
             _welcomeShown = true;
+            _updateCheckQueued = true;
+            // Counted from here, not from when it runs: Home is busy as soon as the welcome is queued.
+            var welcome = BeginFlow();
             Dispatcher.Dispatch(async () =>
             {
+                using var _ = welcome;
                 // First run plays like a Pokémon intro: a professor-style dialogue, then the choices.
                 await DialogueBox.ShowSequenceAsync(_hostGrid,
                     "Hello! Welcome to PKForge!",
@@ -315,7 +416,12 @@ public sealed class HomePage : ContentPage, IPadHandler
         else if (!_updateCheckQueued)
         {
             _updateCheckQueued = true;
-            Dispatcher.Dispatch(async () => await CheckForUpdateAsync(automatic: true));
+            var check = BeginFlow();
+            Dispatcher.Dispatch(async () =>
+            {
+                using var _ = check;
+                await CheckForUpdateAsync(automatic: true);
+            });
         }
     }
 
@@ -333,8 +439,15 @@ public sealed class HomePage : ContentPage, IPadHandler
         IPlatformApplication.Current?.Services.GetService<GamepadRouter>()?.Remove(this);
     }
 
-    private void OnLinkReported(string title, string message) =>
-        MainThread.BeginInvokeOnMainThread(() => _ = PadMenu.ShowAsync(_hostGrid, title, message, "OK"));
+    private void OnLinkReported(string title, string message)
+    {
+        var report = BeginFlow();
+        MainThread.BeginInvokeOnMainThread(async () =>
+        {
+            using var _ = report;
+            await PadMenu.ShowAsync(_hostGrid, title, message, "OK");
+        });
+    }
 
     /// <summary>Android settings do not trigger MAUI page appearing again; resume does.</summary>
     private void OnAppResumed()
@@ -343,7 +456,12 @@ public sealed class HomePage : ContentPage, IPadHandler
             return;
 
         _pendingAuthorizedUpdate = null;
-        Dispatcher.DispatchAsync(async () => await InstallUpdateAsync(authorized));
+        var install = BeginFlow();
+        Dispatcher.DispatchAsync(async () =>
+        {
+            using var _ = install;
+            await InstallUpdateAsync(authorized);
+        });
     }
 
     /// <summary>Every button on the home screen, in one place.</summary>
@@ -420,6 +538,7 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// or plain alphabetical.</summary>
     private async Task ShowFilterMenuAsync()
     {
+        using var flow = BeginFlow();
         var choice = await PadMenu.ShowAsync(_hostGrid, "Filter games", null,
             new PadOption("All games", IconPath: "all"),
             new PadOption("Release order", IconPath: "calendar", Detail: "Every game, from the oldest release to the newest."),
@@ -460,6 +579,7 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// <summary>A cartridge with one save opens it; a shared cartridge asks which save first.</summary>
     private async Task OpenCardAsync(SaveCard card)
     {
+        using var flow = BeginFlow();
         var save = await ChooseSaveAsync(card, "Which save do you want to open?");
         if (save is not null) await OpenSaveAsync(save);
     }
@@ -467,6 +587,7 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// <summary>Long-press / B: the save's identity menu ("Open save" first); a shared cartridge picks the save first.</summary>
     private async Task ShowSaveMenuAsync(SaveCard card)
     {
+        using var flow = BeginFlow();
         var save = await ChooseSaveAsync(card, "Choose the save to rename, recolor or identify.");
         if (save is null) return;
         if (await SaveIdentitySheet.ShowAsync(_hostGrid, _viewModel, save))
@@ -484,6 +605,7 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// </summary>
     private async Task<bool> ChooseEditionOnceAsync(DetectedSave save)
     {
+        using var flow = BeginFlow();
         var store = _viewModel.Identities;
         var current = store.Get(save.DocumentId) ?? new SaveIdentity(save.DocumentId);
         if (_editionDeferred.Contains(save.DocumentId) || save.Guess is not { } guess
@@ -510,21 +632,117 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// <summary>Saves whose edition the player chose to decide later: not asked again this session.</summary>
     private readonly HashSet<string> _editionDeferred = new(StringComparer.Ordinal);
 
+    private static string IconForKind(EmulatorKind kind) => kind switch
+    {
+        EmulatorKind.RetroArch => "retroarch",
+        EmulatorKind.MelonDS => "melonds",
+        EmulatorKind.Azahar or EmulatorKind.CitraMmj => "azahar",
+        EmulatorKind.Eden or EmulatorKind.Ryujinx => "eden",
+        EmulatorKind.Dolphin => "dolphin",
+        _ => "folder",
+    };
+
     /// <summary>Platform folders keep emulator choices together for touch and controller use.</summary>
     private async Task ShowLinkMenuAsync()
     {
+        using var flow = BeginFlow();
+        var discovered = await _discovery.DiscoverRootsAsync();
         while (true)
         {
-            var platform = await PadMenu.ShowAsync(_hostGrid, "Link a storage unit", "Choose a platform to see its emulators.",
-                new PadOption("Game Boy / Game Boy Color", IconPath: "platform-gb"),
-                new PadOption("Game Boy Advance", IconPath: "platform-gba"),
-                new PadOption("Nintendo DS", IconPath: "platform-ds"),
-                new PadOption("GameCube", IconPath: "platform-gc"),
-                new PadOption("Nintendo 3DS", IconPath: "azahar"),
-                new PadOption("Nintendo Switch", IconPath: "eden"),
-                new PadOption("Single save file", IconPath: "file"));
+            var unlinked = discovered.Where(r => !_viewModel.IsRootWatched(r.TreeId)).ToList();
+
+            var menuOptions = new List<PadOption>();
+            if (unlinked.Count > 0)
+            {
+                menuOptions.Add(new PadOption($"Found emulators ({unlinked.Count})", IconPath: "folder"));
+            }
+
+            menuOptions.Add(new PadOption("Game Boy / Game Boy Color", IconPath: "platform-gb"));
+            menuOptions.Add(new PadOption("Game Boy Advance", IconPath: "platform-gba"));
+            menuOptions.Add(new PadOption("Nintendo DS", IconPath: "platform-ds"));
+            menuOptions.Add(new PadOption("GameCube", IconPath: "platform-gc"));
+            menuOptions.Add(new PadOption("Nintendo 3DS", IconPath: "azahar"));
+            menuOptions.Add(new PadOption("Nintendo Switch", IconPath: "eden"));
+#if PKFORGE_DESKTOP
+            menuOptions.Add(new PadOption("ROM folder", IconPath: "folder"));
+#endif
+            menuOptions.Add(new PadOption("Single save file", IconPath: "file"));
+
+            var platform = await PadMenu.ShowAsync(_hostGrid, "Link a storage unit", "Choose a platform to see its emulators.", [.. menuOptions]);
             if (platform is null) return;
+
+            if (platform.StartsWith("Found emulators", StringComparison.Ordinal))
+            {
+                var removable = unlinked.Count(r => r.IsRemovable);
+                var subOptions = new List<PadOption>
+                {
+                    new($"Link all ({unlinked.Count})", IconPath: "folder", Detail: removable switch
+                    {
+                        0 => null,
+                        1 => "Includes 1 folder on a removable drive.",
+                        _ => $"Includes {removable} folders on removable drives.",
+                    }),
+                };
+                foreach (var r in unlinked)
+                {
+                    subOptions.Add(new($"{r.DisplayName} · {r.SourceName}", IconPath: IconForKind(r.Kind),
+                        Detail: r.IsRemovable ? $"Removable drive · {r.TreeId}" : r.TreeId));
+                }
+                subOptions.Add(new("Back", IconPath: "back"));
+
+                // By index: two folders can share a name and a source, so a label cannot say which was picked.
+                // The cursor starts on the first folder, so a quick A never links them all.
+                var discoveredChoice = await PadMenu.ShowIndexAsync(_hostGrid, "Found emulators",
+                    "PKForge detected the following emulator or ROM storage folders on this machine.",
+                    1, [.. subOptions]);
+                if (discoveredChoice is not { } chosen || chosen > unlinked.Count) continue;
+                if (chosen == 0)
+                    await _viewModel.AddDiscoveredRootsAsync(unlinked);
+                else
+                    await _viewModel.AddDiscoveredRootAsync(unlinked[chosen - 1]);
+                return;
+            }
+
             if (platform == "Single save file") { await LinkFileAsync(); return; }
+#if PKFORGE_DESKTOP
+            if (platform == "ROM folder")
+            {
+                if (await PickerIsFreeAsync()) await _viewModel.AddRomFolderCommand.ExecuteAsync(null);
+                return;
+            }
+#endif
+
+#if PKFORGE_DESKTOP
+            var options = platform switch
+            {
+                "Game Boy / Game Boy Color" => new[]
+                {
+                    new PadOption("RetroArch", IconPath: "retroarch"),
+                    new PadOption("ROM folder", IconPath: "folder"),
+                },
+                "Game Boy Advance" => new[]
+                {
+                    new PadOption("RetroArch", IconPath: "retroarch"),
+                    new PadOption("ROM folder", IconPath: "folder"),
+                },
+                "Nintendo DS" => new[]
+                {
+                    new PadOption("melonDS", IconPath: "melonds"),
+                    new PadOption("RetroArch", IconPath: "retroarch"),
+                    new PadOption("ROM folder", IconPath: "folder"),
+                },
+                "GameCube" => new[] { new PadOption("Dolphin", IconPath: "dolphin") },
+                "Nintendo 3DS" => new[]
+                {
+                    new PadOption("Azahar / Lime3DS", IconPath: "azahar"),
+                },
+                _ => new[]
+                {
+                    new PadOption("Ryujinx", IconPath: "eden"),
+                    new PadOption("Eden", IconPath: "eden"),
+                },
+            };
+#else
             var options = platform switch
             {
                 "Game Boy / Game Boy Color" => new[]
@@ -553,6 +771,7 @@ public sealed class HomePage : ContentPage, IPadHandler
                 },
                 _ => new[] { new PadOption("Eden", IconPath: "eden") },
             };
+#endif
             var choice = await PadMenu.ShowAsync(_hostGrid, platform, null, options);
             if (choice is null) continue;
             var guidance = choice switch
@@ -563,13 +782,16 @@ public sealed class HomePage : ContentPage, IPadHandler
                 "Azahar / Lime3DS" => "Save in game and close the emulator. Select the user folder you chose in its setup (the one containing sdmc); sdmc, Nintendo 3DS or a folder above the user folder also work. Restart the game normally after editing.",
                 "Citra MMJ" => "Save in game and close Citra MMJ. In the file picker open the Citra MMJ entry (or Android/data/org.citra.emu/files) and select citra-emu, or /citra-emu on older Android. Restart the game normally after editing.",
                 "Eden" => "Save in game and close the emulator. Select its files root containing the emulated storage. Restart the game normally after editing.",
+                "Ryujinx" => "Save in game and close Ryujinx. Select Ryujinx's save folder (bis/user/save) or user directory (~/.config/Ryujinx). Restart the game normally after editing.",
+                "ROM folder" => "Select the folder containing your Pokémon ROMs and .sav files, or mGBA's save folder if you set one. Subdirectories will be scanned automatically.",
                 "melonDS" => "Save in game and close melonDS. Select the folder containing your .sav battery saves: next to your ROMs by default, or the save folder set in melonDS's settings. Save states are not supported. Restart the game normally after editing.",
                 _ => "Save in game and close the emulator. Select its saves folder (or the folder containing your battery saves). Save states are not supported. Restart the game normally after editing.",
             };
             var proceed = await PadMenu.ShowAsync(_hostGrid, $"Link {choice}",
-                guidance + " If Android does not offer access to the folder, use Single save file with an exported save.",
+                guidance + PlatformText.FolderAccessHint,
                 new PadOption("Choose folder", IconPath: "folder"), new PadOption("Back", IconPath: "back"));
             if (proceed != "Choose folder") continue;
+            if (!await PickerIsFreeAsync()) return;
             switch (choice)
             {
                 case "RetroArch": await _viewModel.AddRetroArchCommand.ExecuteAsync(null); break;
@@ -578,6 +800,8 @@ public sealed class HomePage : ContentPage, IPadHandler
                 case "Azahar / Lime3DS": await _viewModel.AddAzaharCommand.ExecuteAsync(null); break;
                 case "Citra MMJ": await _viewModel.AddCitraMmjCommand.ExecuteAsync(null); break;
                 case "Eden": await _viewModel.AddEdenCommand.ExecuteAsync(null); break;
+                case "Ryujinx": await _viewModel.AddRyujinxCommand.ExecuteAsync(null); break;
+                case "ROM folder": await _viewModel.AddRomFolderCommand.ExecuteAsync(null); break;
                 case "Dolphin": await _viewModel.AddDolphinCommand.ExecuteAsync(null); break;
                 case "DraStic": await _viewModel.AddDraSticCommand.ExecuteAsync(null); break;
                 case "Pizza Boy A (GBA)": await _viewModel.AddPizzaBoyGbaCommand.ExecuteAsync(null); break;
@@ -589,6 +813,7 @@ public sealed class HomePage : ContentPage, IPadHandler
 
     private async Task ShowSettingsAsync()
     {
+        using var flow = BeginFlow();
         var hiddenCount = _viewModel.HiddenSaves.Count;
         var hiddenOption = $"Show hidden saves ({hiddenCount})";
         var options = new List<PadOption>
@@ -600,10 +825,20 @@ public sealed class HomePage : ContentPage, IPadHandler
         if (hiddenCount > 0) options.Add(new PadOption(hiddenOption, IconPath: "show", Detail: "Saves you hid from Home. Pick one to show it again."));
         var scheme = $"Color scheme: {PKForge.Chrome.ColorTheme.Current.Name}";
         var background = $"Box background: {BoxBackground.Name(BoxBackground.Style)}";
+        var art = $"Pokémon art: {SpriteStyleSetting.Name(SpriteStyleSetting.Current)}";
         options.AddRange(
         [
             new PadOption(scheme, IconPath: "palette", Detail: "The app's colors: the default blues or a theme for each type."),
             new PadOption(background, IconPath: "box", Detail: "How each PC box shows the wallpaper the game gives it."),
+        ]);
+#if PKFORGE_DESKTOP
+        var uiSize = $"UI size: {Platforms.Desktop.UiSizeSetting.Current}";
+        options.Add(new PadOption(uiSize, IconPath: "search", Detail: "How large text and controls are drawn in the window."));
+#endif
+        if (SpriteStyleSetting.Offered)
+            options.Add(new PadOption(art, IconPath: "pokedex", Detail: "HOME renders from the sprite pack, or the games' pixel sprites."));
+        options.AddRange(
+        [
             new PadOption("Restore points", IconPath: "history", Detail: "The backups made before each write, to put a save back as it was."),
             new PadOption("About PKForge", IconPath: "info"),
             new PadOption("Check for update", IconPath: "update"),
@@ -615,6 +850,10 @@ public sealed class HomePage : ContentPage, IPadHandler
         if (choice == hiddenOption) { await ShowHiddenSavesAsync(); return; }
         if (choice == scheme) { await ShowColorSchemeAsync(); return; }
         if (choice == background) { await ShowBoxBackgroundAsync(); return; }
+        if (choice == art && SpriteStyleSetting.Offered) { await ShowSpriteStyleAsync(); return; }
+#if PKFORGE_DESKTOP
+        if (choice == uiSize) { await ShowUiSizeAsync(); return; }
+#endif
         switch (choice)
         {
             case "Link an emulator": await ShowLinkMenuAsync(); break;
@@ -635,6 +874,7 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// <summary>Hidden saves, one row each; picking one puts it back on the shelf.</summary>
     private async Task ShowHiddenSavesAsync()
     {
+        using var flow = BeginFlow();
         while (_viewModel.HiddenSaves is { Count: > 0 } hidden)
         {
             var save = await SavePickerSheet.ChooseFromTileAsync(_hostGrid, hidden, "Hidden saves",
@@ -660,6 +900,7 @@ public sealed class HomePage : ContentPage, IPadHandler
 
     private async Task ShowManageLinkedStorageAsync()
     {
+        using var flow = BeginFlow();
         var roots = IPlatformApplication.Current!.Services.GetRequiredService<IWatchedRootStore>().GetRoots();
         if (roots.Count == 0)
         {
@@ -703,6 +944,7 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// <summary>Release checks: automatic failures stay quiet, manual failures explain themselves.</summary>
     private async Task CheckForUpdateAsync(bool automatic)
     {
+        using var flow = BeginFlow();
         var service = IPlatformApplication.Current?.Services.GetService<AppUpdateService>();
         if (service is null) return;
 
@@ -713,7 +955,10 @@ public sealed class HomePage : ContentPage, IPadHandler
         }
         catch (Exception error)
         {
-            Android.Util.Log.Warn("PKForgeUpdate", $"Automatic update check failed: {error}");
+            // A release without this platform's package is expected, so it needs no stack trace.
+            AppLog.Warn("update", error is ReleaseAssetMissingException
+                ? $"Update check: {error.Message}"
+                : $"Update check failed: {error}");
             if (!automatic)
                 _viewModel.Status = $"Update check failed: {error.Message}";
             return;
@@ -730,9 +975,10 @@ public sealed class HomePage : ContentPage, IPadHandler
         if (automatic && !_isAppearing)
             return;
 
-        var choice = await DialogueChoiceBox.ShowAsync(_hostGrid,
-            $"A new version of PKForge is available! Version {update.Version} is ready to install. Would you like to update now?",
-            "YES", "NO", "DON'T REMIND ME");
+        var offer = _appPlatform.CanSelfInstallUpdates
+            ? $"A new version of PKForge is available! Version {update.Version} is ready to install. Would you like to update now?"
+            : $"A new version of PKForge is available! Version {update.Version} is out. Would you like to open its release page?";
+        var choice = await DialogueChoiceBox.ShowAsync(_hostGrid, offer, "YES", "NO", "DON'T REMIND ME");
         switch (choice)
         {
             case "YES":
@@ -750,7 +996,13 @@ public sealed class HomePage : ContentPage, IPadHandler
 
     private async Task InstallUpdateAsync(AvailableAppUpdate update)
     {
+        using var flow = BeginFlow();
         var service = IPlatformApplication.Current!.Services.GetRequiredService<AppUpdateService>();
+        if (!_appPlatform.CanSelfInstallUpdates)
+        {
+            await OpenReleasePageAsync(service, update);
+            return;
+        }
         var overlay = LoadingOverlay.Show(_hostGrid, "Downloading the update!",
             $"PKForge {update.Version} is on its way. Android will confirm the installation.");
         AppUpdateInstallResult result;
@@ -769,7 +1021,7 @@ public sealed class HomePage : ContentPage, IPadHandler
         }
         catch (Exception error)
         {
-            Android.Util.Log.Error("PKForgeUpdate", $"Download/install failed: {error}");
+            AppLog.Error("update", $"Download/install failed: {error}");
             _viewModel.Status = $"Update failed: {error.Message}";
             var openRelease = await PadMenu.ConfirmAsync(_hostGrid, "Open the release page?",
                 "The in-app installer could not finish. The GitHub release page has the same APK.", "Open");
@@ -810,18 +1062,46 @@ public sealed class HomePage : ContentPage, IPadHandler
         }
     }
 
+    /// <summary>Where the app cannot install its own updates, the installer opens the release page instead.</summary>
+    private async Task OpenReleasePageAsync(AppUpdateService service, AvailableAppUpdate update)
+    {
+        string reason;
+        try
+        {
+            var result = await service.DownloadAndInstallAsync(update, (_, _) => { }, CancellationToken.None);
+            if (result != AppUpdateInstallResult.ReleasePageNotOpened)
+            {
+                _viewModel.Status = "The PKForge release page is open.";
+                return;
+            }
+            AppLog.Warn("update", "No program opened the release page");
+            reason = "no program to open web links was found";
+        }
+        catch (Exception error)
+        {
+            AppLog.Error("update", "Opening the release page failed", error);
+            reason = error.Message;
+        }
+        await PadMenu.ShowAsync(_hostGrid, "Release page",
+            $"The release page could not be opened ({reason}). PKForge {update.Version} is at {update.ReleaseUrl}", "OK");
+    }
+
+#if ANDROID
     private async Task ReportInstallFailureAsync(AvailableAppUpdate update, string reason)
     {
+        using var flow = BeginFlow();
         _viewModel.Status = $"Update failed: {reason}";
         var openRelease = await PadMenu.ConfirmAsync(_hostGrid, "Open the release page?",
             $"Android did not install the update ({reason}). The GitHub release page has the same APK.", "Open");
         if (openRelease)
             await Launcher.OpenAsync(update.ReleaseUrl);
     }
+#endif
 
     /// <summary>Background music: library, play/pause, skip, order, autostart.</summary>
     private async Task ShowMusicAsync()
     {
+        using var flow = BeginFlow();
         var music = IPlatformApplication.Current?.Services.GetService<Domain.IMusicPlayer>();
         if (music is null) return;
 
@@ -829,11 +1109,10 @@ public sealed class HomePage : ContentPage, IPadHandler
         {
             var order = music.Order == Domain.MusicOrder.Shuffle ? "Shuffle" : "In order";
             var auto = music.Autostart ? "ON" : "OFF";
-            var androidMusic = music as Platforms.Android.MusicPlayer;
             var playing = music.IsPlaying
                 ? $"Playing: {music.Library[music.CurrentIndex ?? 0].Title}"
                 : $"Library: {music.Library.Count} track(s)";
-            if (androidMusic?.LastError is { } err)
+            if (music.LastError is { } err)
                 playing += $"\nLast error: {err}";
             var choice = await PadMenu.ShowAsync(_hostGrid, "Background music", playing,
                 new PadOption(music.IsPlaying ? "Pause" : "Play", IconPath: music.IsPlaying ? "pause" : "play"),
@@ -851,7 +1130,7 @@ public sealed class HomePage : ContentPage, IPadHandler
                 case var add when add?.StartsWith("Add music files", StringComparison.Ordinal) == true:
                 {
                     var picker = IPlatformApplication.Current?.Services.GetService<Domain.IDocumentPicker>();
-                    if (picker is null) break;
+                    if (picker is null || !await PickerIsFreeAsync()) break;
                     var documents = await picker.PickManyAsync();
                     if (documents.Count == 0) break;
                     var added = music.Add(documents);
@@ -878,6 +1157,7 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// <summary>How each PC box shows its game wallpaper.</summary>
     private async Task ShowBoxBackgroundAsync()
     {
+        using var flow = BeginFlow();
         var styles = Enum.GetValues<PKForge.Chrome.StoragePaint.WallpaperStyle>();
         var picked = await PadMenu.ShowAsync(_hostGrid, "Box background", null,
             [
@@ -893,9 +1173,31 @@ public sealed class HomePage : ContentPage, IPadHandler
         }
     }
 
+    /// <summary>Which art the boxes, the party and the summary draw Pokémon with.</summary>
+    private async Task ShowSpriteStyleAsync()
+    {
+        using var flow = BeginFlow();
+        var home = SpriteStyleSetting.Name(SpriteStyle.Home);
+        var pixel = SpriteStyleSetting.Name(SpriteStyle.Pixel);
+        var picked = await PadMenu.ShowAsync(_hostGrid, "Pokémon art", null,
+            new PadOption(home, IconPath: "pokedex", Detail: "Pokémon HOME's sharp, high-resolution pictures, from the sprite pack."),
+            new PadOption(pixel, IconPath: "box", Detail: "The games' own pixel sprites and box icons."));
+        if (picked != home && picked != pixel) return;
+        var style = picked == home ? SpriteStyle.Home : SpriteStyle.Pixel;
+        SpriteStyleSetting.Set(style);
+        AppLog.Info("sprites", $"Player picked {style} art");
+        _viewModel.Status = $"Pokémon art: {picked}.";
+        if (style == SpriteStyle.Home && !SpritePackDownloader.MainPackInstalled
+            && await PadMenu.ConfirmAsync(_hostGrid, "Download the sprite pack?",
+                $"HOME renders come with the sprite pack ({SpritePackDownloader.SizeHint}). Without it, each one downloads the first time it is shown, and the pixel sprite stands in while offline.",
+                "Download"))
+            await DownloadSpritePackAsync();
+    }
+
     /// <summary>The color scheme picker; a new scheme rebuilds Home and the lower screen in its colors.</summary>
     private async Task ShowColorSchemeAsync()
     {
+        using var flow = BeginFlow();
         var theme = await ThemePicker.ShowAsync(_hostGrid);
         if (theme is null || theme.Id == PKForge.Chrome.ColorTheme.Current.Id) return;
         ColorThemeSetting.Set(theme);
@@ -903,9 +1205,32 @@ public sealed class HomePage : ContentPage, IPadHandler
         if (Application.Current is App app) await app.ReloadForThemeAsync();
     }
 
+#if PKFORGE_DESKTOP
+    /// <summary>The UI size picker; the window rescales at once and Home is rebuilt at the new size.</summary>
+    private async Task ShowUiSizeAsync()
+    {
+        using var flow = BeginFlow();
+        PadOption[] options =
+        [
+            new(nameof(Platforms.Desktop.UiSize.Compact), Detail: "The most on screen at once, with the smallest text."),
+            new(nameof(Platforms.Desktop.UiSize.Standard), Detail: "Larger text and controls, easy to read at a desk."),
+            new(nameof(Platforms.Desktop.UiSize.Large), Detail: "The largest text and controls, for small screens or reading from afar."),
+        ];
+        var current = Array.FindIndex(options, option => option.Label == Platforms.Desktop.UiSizeSetting.Current.ToString());
+        var picked = await PadMenu.ShowAsync(_hostGrid, "UI size", null, current, options);
+        if (!Enum.TryParse<Platforms.Desktop.UiSize>(picked, out var size) || !Enum.IsDefined(size)
+            || size == Platforms.Desktop.UiSizeSetting.Current) return;
+        Platforms.Desktop.UiSizeSetting.Set(size);
+        AppLog.Info("display", $"Player picked the {size} UI size");
+        _viewModel.Status = $"UI size: {size}.";
+        if (Application.Current is App app) await app.ReloadForThemeAsync();
+    }
+#endif
+
     /// <summary>Maintenance actions: the sprite pack, the rescan, and the scan report.</summary>
     private async Task ShowMiscAsync()
     {
+        using var flow = BeginFlow();
         var trainerProfiles = IPlatformApplication.Current!.Services.GetRequiredService<TrainerProfileStore>();
         var choice = await PadMenu.ShowAsync(_hostGrid, "Misc", null,
             new PadOption(trainerProfiles.UseCurrentTrainerForGeneration
@@ -915,9 +1240,13 @@ public sealed class HomePage : ContentPage, IPadHandler
             new PadOption($"Download full sprite pack ({SpritePackDownloader.SizeHint})", IconPath: "download", Detail: "Animated sprites, HOME pictures and item icons, to use offline."),
             new PadOption("Rescan games", IconPath: "refresh", Detail: "Look through your linked folders for saves again."),
             new PadOption("Scan report", IconPath: "report", Detail: "What the last scan found in each folder, to copy and send us."),
-            new PadOption("Share logs", IconPath: "export", Detail: "Crash reports and recent activity, to send us when something goes wrong."),
+            new PadOption(PlatformText.LogsAction, IconPath: "export", Detail: PlatformText.LogsDetail),
             new PadOption(SecondScreenMode.UserOff ? "Second screen: OFF" : "Second screen: ON", IconPath: "compact",
                 Detail: "OFF keeps PKForge on one screen, so the other stays free (an emulator, say)."),
+#if PKFORGE_DESKTOP
+            new PadOption(Platforms.Desktop.SdlGamepadSource.RumbleEnabled ? "Controller rumble: ON" : "Controller rumble: OFF", IconPath: "game",
+                Detail: "ON gives the controller a short buzz for each press it makes."),
+#endif
             new PadOption(Services.HaXMode.IsOn ? "HaX mode: ON" : "HaX mode: OFF", IconPath: "hax",
                 Detail: "ON lets pickers offer any option, even illegal ones."),
             new PadOption(Services.HardcoreMode.IsOn ? "Hardcore mode: ON" : "Hardcore mode: OFF", IconPath: "hardcore",
@@ -943,7 +1272,7 @@ public sealed class HomePage : ContentPage, IPadHandler
                 // Called directly: the command refuses to start while an older run it owns is still pending.
                 await _viewModel.RescanAsync();
                 break;
-            case "Share logs":
+            case PlatformText.LogsAction:
                 await ShareLogsAsync();
                 break;
             case "Second screen: ON" or "Second screen: OFF":
@@ -966,6 +1295,16 @@ public sealed class HomePage : ContentPage, IPadHandler
                     : host?.IsAvailable == true ? "Second screen on." : "Second screen on, but no second display is available.";
                 break;
             }
+#if PKFORGE_DESKTOP
+            case "Controller rumble: ON" or "Controller rumble: OFF":
+            {
+                var rumble = !Platforms.Desktop.SdlGamepadSource.RumbleEnabled;
+                Platforms.Desktop.SdlGamepadSource.RumbleEnabled = rumble;
+                AppLog.Info("input", rumble ? "Player turned controller rumble on" : "Player turned controller rumble off");
+                _viewModel.Status = rumble ? "Controller rumble is ON." : "Controller rumble is OFF.";
+                break;
+            }
+#endif
             case "Scan report":
             {
                 var action = await PadMenu.ShowAsync(_hostGrid, "Scan report", _viewModel.ScanReport, "Copy report", "Close");
@@ -1006,6 +1345,7 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// </summary>
     private async Task ShareLogsAsync()
     {
+        using var flow = BeginFlow();
         try
         {
             var archive = await Task.Run(() => AppLog.BuildShareArchive(new Dictionary<string, string>
@@ -1013,12 +1353,12 @@ public sealed class HomePage : ContentPage, IPadHandler
                 ["scan-report.txt"] = _viewModel.ScanReport,
             }));
             AppLog.MarkCrashesSeen();
-            await Share.Default.RequestAsync(new ShareFileRequest("PKForge logs", new ShareFile(archive, "application/zip")));
+            await _appPlatform.ExportFilesAsync("PKForge logs", [archive]);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             AppLog.Error("logs", "Sharing the logs failed", error);
-            await PadMenu.ShowAsync(_hostGrid, "Share logs", $"The logs could not be packed: {error.Message}", "OK");
+            await PadMenu.ShowAsync(_hostGrid, PlatformText.LogsAction, $"The logs could not be packed: {error.Message}", "OK");
         }
     }
 
@@ -1027,17 +1367,19 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// <summary>After a crash, offers the report once on the next launch.</summary>
     private async Task OfferCrashReportAsync()
     {
+        using var flow = BeginFlow();
         if (AppLog.UnseenCrashes().Count == 0) return;
         var choice = await PadMenu.ShowAsync(_hostGrid, "PKForge closed unexpectedly",
             "A crash report was saved. Sharing it helps us fix it: it holds the error, your recent activity, file names and your device model, never your save data.",
-            "Share report", "Not now");
+            PlatformText.CrashReportAction, "Not now");
         AppLog.MarkCrashesSeen();
-        if (choice == "Share report") await ShareLogsAsync();
+        if (choice == PlatformText.CrashReportAction) await ShareLogsAsync();
     }
 
     /// <summary>Downloads every species' animated + HOME sprites for full offline use.</summary>
     private async Task DownloadSpritePackAsync()
     {
+        using var flow = BeginFlow();
         var downloader = IPlatformApplication.Current?.Services.GetService<SpritePackDownloader>();
         if (downloader is null) return;
         if (await Task.Run(downloader.CountMissing) == 0)
@@ -1047,10 +1389,10 @@ public sealed class HomePage : ContentPage, IPadHandler
         }
         var overlay = LoadingOverlay.Show(_hostGrid, "Catching all the sprites!",
             "Downloading animated battle sprites and HOME renders for every Pokémon. You can cancel anytime; finished parts are kept and it resumes where it left off.");
+        SpritePackResult? result = null;
         try
         {
-            await downloader.RunAsync(overlay.Report, overlay.Cancellation.Token);
-            _viewModel.Status = "Sprite pack complete - fully offline now.";
+            result = await downloader.RunAsync(overlay.Report, overlay.Cancellation.Token);
         }
         catch (OperationCanceledException)
         {
@@ -1058,16 +1400,58 @@ public sealed class HomePage : ContentPage, IPadHandler
         }
         catch (Exception error)
         {
+            AppLog.Error("sprites", "Sprite pack download failed", error);
             _viewModel.Status = $"Sprite pack stopped: {error.Message}";
         }
         finally
         {
             overlay.Close();
         }
+        if (result is null) return;
+        AppLog.Info("sprites", $"Sprite pack download: {result.Status}, {result.Missing} missing");
+        switch (result.Status)
+        {
+            case SpritePackStatus.Complete:
+                _viewModel.Status = SpriteStyleSetting.Offered && SpriteStyleSetting.Current == SpriteStyle.Home
+                    ? "Sprite pack complete - HOME renders are on, fully offline."
+                    : "Sprite pack complete - fully offline now.";
+                break;
+            case SpritePackStatus.Offline:
+                await PadMenu.ShowAsync(_hostGrid, "Sprite pack",
+                    "The sprite pack needs an internet connection. Everything else works offline; try again once you are connected.", "OK");
+                break;
+            case SpritePackStatus.NoSpace:
+                await PadMenu.ShowAsync(_hostGrid, "Not enough space",
+                    $"The sprite pack needs about {Megabytes(result.SpaceNeeded)} free while it unpacks, and there is {Megabytes(result.SpaceFree)}. Free up some space and try again.", "OK");
+                break;
+            case SpritePackStatus.Interrupted:
+                _viewModel.Status = "Sprite pack paused: the download stopped part-way. Try again from Settings to resume where it left off.";
+                break;
+            case SpritePackStatus.Incomplete:
+                _viewModel.Status = $"Sprite pack: {result.Missing} files could not be downloaded. Try again from Settings to fetch them.";
+                break;
+        }
+    }
+
+    private static string Megabytes(long bytes) => $"{Math.Max(0, bytes) >> 20:N0} MB";
+
+    /// <summary>
+    /// False, after telling the player, while a system file or folder picker is already open:
+    /// a second one would be refused without a word.
+    /// </summary>
+    private async Task<bool> PickerIsFreeAsync()
+    {
+        if (!PKForge.Infrastructure.DialogConcurrencyGuard.IsActive) return true;
+        AppLog.Info("home", "A picker was requested while another is open");
+        await PadMenu.ShowAsync(_hostGrid, "A file picker is already open",
+            "Finish with the open file picker, or close it, then try again.", "OK");
+        return false;
     }
 
     private async Task LinkFileAsync()
     {
+        using var flow = BeginFlow();
+        if (!await PickerIsFreeAsync()) return;
         await _viewModel.LinkFileCommand.ExecuteAsync(null);
         if (_viewModel.OpenedSave)
             await PushAsync<BoxBrowserPage>();
@@ -1286,6 +1670,7 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// <summary>The Living Dex Autopilot over every save on the shelf and the Bank.</summary>
     private async Task OpenAutopilotAsync()
     {
+        using var flow = BeginFlow();
         var services = IPlatformApplication.Current?.Services;
         var boxes = services?.GetService<BoxBrowserViewModel>();
         var data = services?.GetService<IGameDataService>();
@@ -1299,6 +1684,7 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// <summary>The events shelf: community collections here, wondercards inside the game.</summary>
     private async Task ShowEventsMenuAsync()
     {
+        using var flow = BeginFlow();
         var choice = await PadMenu.ShowAsync(_hostGrid, "Event database", null,
             new PadOption($"Community boxes ({Services.CommunityBoxService.RepoTitle})", IconPath: "community",
                 Detail: "Event Pokémon collections shared online, to put in your Bank."),
@@ -1328,6 +1714,7 @@ public sealed class HomePage : ContentPage, IPadHandler
 
     private async Task OpenSaveAsync(DetectedSave save)
     {
+        using var flow = BeginFlow();
         if (!await ChooseEditionOnceAsync(save)) return;
         // The pick re-resolves the save: open the version that carries the chosen edition.
         save = _viewModel.Saves.FirstOrDefault(s => s.DocumentId == save.DocumentId) ?? save;
@@ -1354,6 +1741,7 @@ public sealed class HomePage : ContentPage, IPadHandler
 
     private async Task PushAsync<TPage>() where TPage : Page
     {
+        using var flow = BeginFlow();
         var services = IPlatformApplication.Current?.Services
             ?? throw new InvalidOperationException("MAUI services are unavailable.");
         await Navigation.PushAsync(services.GetRequiredService<TPage>());
@@ -1361,6 +1749,7 @@ public sealed class HomePage : ContentPage, IPadHandler
 
     private async Task PushParkAsync()
     {
+        using var flow = BeginFlow();
         if (Interlocked.Exchange(ref _parkNavigationPending, 1) != 0) return;
         try
         {

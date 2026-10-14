@@ -34,7 +34,8 @@ internal static class SramPadding
     /// <summary>
     /// mGBA stores a real-time-clock cartridge's RTC state as 16 bytes appended to the flash
     /// dump (Unbound, Emerald and Ruby/Sapphire carry an RTC). Unlike padding it is live
-    /// data, so it is dropped for parsing and handed back verbatim on write.
+    /// data, so it is dropped for parsing and handed back verbatim on write. Game Boy RTC
+    /// footers need nothing here: PKHeX splits and restores those itself.
     /// </summary>
     private const int RtcFooterLength = 16;
 

@@ -34,7 +34,7 @@ public sealed class PksmArt
     {
         var b = Get(name);
         if (b is null) return;
-        c.DrawBitmap(b, dst, new SKPaint());
+        c.DrawBitmap(b, dst, SKSamplingOptions.Default, new SKPaint());
     }
 
     /// <summary>Draws at integer scale (2x, 3x...) anchored top-left.</summary>
@@ -43,7 +43,7 @@ public sealed class PksmArt
         var b = Get(name);
         if (b is null) return;
         c.DrawBitmap(b, new SKRect(x, y, x + b.Width * scale, y + b.Height * scale),
-            new SKPaint());
+            SKSamplingOptions.Default, new SKPaint());
     }
 
     /// <summary>
@@ -68,7 +68,7 @@ public sealed class PksmArt
         void Piece(int sx, int sy, int sw, int sh, float dx, float dy, float dw, float dh)
         {
             if (sw <= 0 || sh <= 0 || dw <= 0.01f || dh <= 0.01f) return;
-            c.DrawBitmap(bmp, new SKRectI(sx, sy, sx + sw, sy + sh), new SKRect(dx, dy, dx + dw, dy + dh), p);
+            c.DrawBitmap(bmp, new SKRectI(sx, sy, sx + sw, sy + sh), new SKRect(dx, dy, dx + dw, dy + dh), SKSamplingOptions.Default, p);
         }
 
         // corners
@@ -94,7 +94,7 @@ public sealed class PksmArt
         if (src is null) return new SKBitmap(1, 1);
         var copy = new SKBitmap(src.Width, src.Height);
         using var canvas = new SKCanvas(copy);
-        canvas.DrawBitmap(src, 0, 0);
+        canvas.DrawBitmap(src, 0, 0, SKSamplingOptions.Default);
         canvas.DrawRect(0, 0, src.Width, src.Height, new SKPaint { Color = color, BlendMode = SKBlendMode.SrcIn });
         _cache[key] = copy;
         return copy;

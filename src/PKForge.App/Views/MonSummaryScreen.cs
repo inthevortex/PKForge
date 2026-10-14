@@ -161,6 +161,7 @@ public sealed class MonSummaryScreen : IPadPagingHandler
         }
         catch (Exception error)
         {
+            AppLog.Error("summary", $"Summary of slot {slot} failed", error);
             if (!Wanted()) return;
             _view.Show(null, emptyText: $"Can't read this Pokémon\n{error.Message}");
         }

@@ -37,7 +37,7 @@ public static class Kit
                 prerenderedSize = info.Size;
                 prerenderedTheme = ColorTheme.Version;
             }
-            args.Surface.Canvas.DrawBitmap(prerendered, 0, 0);
+            args.Surface.Canvas.DrawBitmap(prerendered, 0, 0, SKSamplingOptions.Default);
         };
         canvasView.Unloaded += (_, _) =>
         {
@@ -503,7 +503,11 @@ public static class Kit
                 using var tint = new SKPaint { ColorFilter = SKColorFilter.CreateBlendMode(UiTokens.BagCyanEdge.ToSKColor(), SKBlendMode.SrcIn) };
                 var side = Math.Min(args.Info.Width, args.Info.Height);
                 var dest = SKRect.Create((args.Info.Width - side) / 2f, (args.Info.Height - side) / 2f, side, side);
+#if PKFORGE_DESKTOP
+                Platforms.Desktop.DesktopImages.DrawPixelArt(c, image, dest, tint);
+#else
                 c.DrawImage(image, dest, new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None), tint);
+#endif
             };
             face = canvas;
         }
@@ -513,10 +517,13 @@ public static class Kit
             VerticalTextAlignment = TextAlignment.Center, HorizontalTextAlignment = TextAlignment.Center,
         };
         var drawn = face is SKCanvasView;
+        // The border clips its content to the stroke shape, and the shoulder keys' art reaches
+        // the corners and bottom edge that a disc would cut away.
+        Shape shape = drawn ? new Microsoft.Maui.Controls.Shapes.Rectangle() : new RoundRectangle { CornerRadius = 11 };
         var key = new Border
         {
             StrokeThickness = 0,
-            StrokeShape = new RoundRectangle { CornerRadius = 11 },
+            StrokeShape = shape,
             BackgroundColor = drawn ? Colors.Transparent : UiTokens.BagCyanEdge,
             Padding = new Thickness(!drawn && glyph.Length > 1 ? 7 : 0, 0),
             MinimumWidthRequest = 22,

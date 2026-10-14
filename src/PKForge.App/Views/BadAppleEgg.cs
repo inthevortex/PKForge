@@ -1,4 +1,6 @@
+#if ANDROID
 using MediaPlayer = Android.Media.MediaPlayer;
+#endif
 using PKForge.App.Services;
 using PKForge.Chrome;
 using PKForge.Domain;
@@ -24,9 +26,13 @@ public sealed class BadAppleEgg : IPadHandler
     private readonly BadAppleFrames _frames;
     private readonly BadApplePainter _painter;
     private readonly SKFont _font = new(BoxBrowserPage.PixelTypeface(), 20);
-    private readonly Platforms.Android.MusicPlayer? _music;
+    private readonly IMusicPlayer? _music;
     private readonly System.Diagnostics.Stopwatch _clock = new();
+#if ANDROID
     private MediaPlayer? _song;
+#elif PKFORGE_DESKTOP
+    private Platforms.Desktop.DesktopBadAppleAudio? _song;
+#endif
     private bool _closed;
 
     public static async Task PlayAsync(Grid host)
@@ -53,7 +59,7 @@ public sealed class BadAppleEgg : IPadHandler
         _painter = new BadApplePainter(_font, "PKFORGE·" + string.Concat(names.Select(name => name.ToUpperInvariant() + "·")));
 
         // The player's music steps aside the way it does when the app leaves the screen.
-        _music = services?.GetService<IMusicPlayer>() as Platforms.Android.MusicPlayer;
+        _music = services?.GetService<IMusicPlayer>();
         _music?.PauseForBackground();
         App.Suspended += Close;
 
@@ -77,6 +83,7 @@ public sealed class BadAppleEgg : IPadHandler
     /// <summary>The song plays from a copy in the cache: MediaPlayer cannot read the APK's compressed assets.</summary>
     private async Task StartSongAsync()
     {
+#if ANDROID
         try
         {
             var path = Path.Combine(FileSystem.CacheDirectory, "badapple.m4a");
@@ -101,6 +108,32 @@ public sealed class BadAppleEgg : IPadHandler
             // No song: the picture still plays, on its own clock.
             AppLog.Warn("about", $"The easter egg plays without its song: {error.Message}");
         }
+#elif PKFORGE_DESKTOP
+        try
+        {
+            var path = Path.Combine(FileSystem.CacheDirectory, "badapple.ogg");
+            if (!File.Exists(path))
+            {
+                await using var asset = await FileSystem.OpenAppPackageFileAsync("badapple/audio.ogg");
+                var partial = path + ".part";
+                await using (var file = File.Create(partial)) await asset.CopyToAsync(file);
+                File.Move(partial, path, overwrite: true);
+            }
+            if (_closed) return;
+            var song = new Platforms.Desktop.DesktopBadAppleAudio(path);
+            song.Completion += () => MainThread.BeginInvokeOnMainThread(Close);
+            if (_closed) { song.Dispose(); return; }
+            _song = song;
+            song.Start();
+        }
+        catch (Exception error) when (error is IOException or InvalidOperationException)
+        {
+            // No song: the picture still plays, on its own clock.
+            AppLog.Warn("about", $"The easter egg plays without its song: {error.Message}");
+        }
+#else
+        await Task.CompletedTask;
+#endif
         _clock.Start();
         _frame.Request();
     }
@@ -118,9 +151,15 @@ public sealed class BadAppleEgg : IPadHandler
         App.Suspended -= Close;
         _router?.Remove(this);
         _host.Remove(_overlay);
+#if ANDROID
         _song?.Stop();
         _song?.Release();
         _song = null;
+#elif PKFORGE_DESKTOP
+        _song?.Stop();
+        _song?.Dispose();
+        _song = null;
+#endif
         _frames.Dispose();
         _font.Dispose();
         _music?.ResumeFromBackground();
@@ -133,7 +172,11 @@ public sealed class BadAppleEgg : IPadHandler
         var theme = ColorTheme.Current;
         canvas.Clear(theme.Void);
         if (_closed || !_clock.IsRunning) return;
+#if ANDROID || PKFORGE_DESKTOP
         var ms = _song is { } song ? song.CurrentPosition : _clock.ElapsedMilliseconds;
+#else
+        var ms = _clock.ElapsedMilliseconds;
+#endif
         if (!_frames.SeekForward((int)(ms * _frames.Fps / 1000)))
         {
             if (_song is null) MainThread.BeginInvokeOnMainThread(Close);

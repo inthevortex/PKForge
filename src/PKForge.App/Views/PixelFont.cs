@@ -1,24 +1,30 @@
+using PKForge.App.Services;
 using SkiaSharp;
 
 namespace PKForge.App.Views;
 
 /// <summary>
-/// The bundled NDS12 pixel face for Skia painters. MAUI font aliases never resolve through
-/// SKTypeface.FromFamilyName, and bundled fonts live at assets/NDS12.ttf (no Fonts/ prefix),
-/// so this loads the bytes from the app package once and caches the face.
+/// The bundled NDS12 pixel face and M PLUS Rounded fallback for Skia painters. MAUI font
+/// aliases never resolve through SKTypeface.FromFamilyName, so each face is loaded once from
+/// its font file at the app package root (both heads package the fonts there) and shared.
 /// </summary>
 public static class PixelFont
 {
-    private static readonly object Gate = new();
-    private static SKTypeface? _face;
-    private static Task? _loadTask;
+    private const string PixelFile = "NDS12.ttf";
+    private const string FallbackFile = "MPLUSRounded1c-Regular.ttf";
 
+    private static readonly object Gate = new();
+    private static readonly Lazy<SKTypeface?> Pixel = new(() => LoadBundled(PixelFile));
+    private static readonly Lazy<SKTypeface?> Fallback = new(() => LoadBundled(FallbackFile));
+    private static Task? _loadTask;
+    private static Task? _fallbackTask;
+
+    /// <summary>The pixel face, or <see cref="SKTypeface.Default"/> until it has loaded.</summary>
     public static SKTypeface Face
     {
         get
         {
-            var face = Volatile.Read(ref _face);
-            if (face is not null) return face;
+            if (Pixel.IsValueCreated) return Pixel.Value ?? SKTypeface.Default;
             _ = WarmAsync();
             // Font loading must never block a Skia paint callback. The next timer
             // repaint automatically picks up the bundled face after it is ready.
@@ -26,29 +32,13 @@ public static class PixelFont
         }
     }
 
+    /// <summary>The pixel face, loaded on the calling thread if it is not ready yet; null when the bundled file cannot be read.</summary>
+    internal static SKTypeface? LoadedFace => Pixel.Value;
+
     public static Task WarmAsync()
     {
         lock (Gate)
-            return _loadTask ??= Task.Run(Load);
-    }
-
-    private static void Load()
-    {
-        SKTypeface face;
-        try
-        {
-            using var stream = FileSystem.OpenAppPackageFileAsync("NDS12.ttf").GetAwaiter().GetResult();
-            using var bytes = new MemoryStream();
-            stream.CopyTo(bytes);
-            var cache = System.IO.Path.Combine(FileSystem.CacheDirectory, "NDS12.ttf");
-            File.WriteAllBytes(cache, bytes.ToArray());
-            face = SKTypeface.FromFile(cache) ?? SKTypeface.Default;
-        }
-        catch
-        {
-            face = SKTypeface.Default;
-        }
-        Volatile.Write(ref _face, face);
+            return _loadTask ??= Task.Run(() => _ = Pixel.Value);
     }
 
     /// <summary>The bundled M PLUS Rounded face: full Latin + Japanese coverage, the
@@ -57,49 +47,47 @@ public static class PixelFont
     {
         get
         {
-            var face = Volatile.Read(ref _fallback);
-            if (face is not null) return face;
+            if (Fallback.IsValueCreated) return Fallback.Value ?? SKTypeface.Default;
             _ = WarmFallbackAsync();
             return SKTypeface.Default;
         }
     }
 
-    private static SKTypeface? _fallback;
-
     public static Task WarmFallbackAsync()
     {
         lock (Gate)
-            return _fallbackTask ??= Task.Run(() =>
-            {
-                SKTypeface face;
-                try
-                {
-                    // MauiFont resources land at the assets root, not in Fonts/.
-                    using var stream = FileSystem.OpenAppPackageFileAsync("MPLUSRounded1c-Regular.ttf").GetAwaiter().GetResult();
-                    using var bytes = new MemoryStream();
-                    stream.CopyTo(bytes);
-                    var cache = System.IO.Path.Combine(FileSystem.CacheDirectory, "MPLUSRounded1c-Regular.ttf");
-                    File.WriteAllBytes(cache, bytes.ToArray());
-                    face = SKTypeface.FromFile(cache) ?? SKTypeface.Default;
-                }
-                catch
-                {
-                    face = SKTypeface.Default;
-                }
-                Volatile.Write(ref _fallback, face);
-            });
+            return _fallbackTask ??= Task.Run(() => _ = Fallback.Value);
     }
 
-    private static Task? _fallbackTask;
+    /// <summary>Copies a bundled font to the cache and opens it by path; null (logged once) when it cannot be read.</summary>
+    private static SKTypeface? LoadBundled(string fontName)
+    {
+        try
+        {
+            using var stream = FileSystem.OpenAppPackageFileAsync(fontName).GetAwaiter().GetResult();
+            var cache = System.IO.Path.Combine(FileSystem.CacheDirectory, fontName);
+            using (var output = File.Create(cache))
+                stream.CopyTo(output);
+            var face = SKTypeface.FromFile(cache);
+            if (face is null) AppLog.Warn("fonts", $"Skia could not open {fontName}; using the default face");
+            return face;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("fonts", $"Failed to load {fontName}: {ex.Message}");
+            return null;
+        }
+    }
 
     /// <summary>The pixel face at a size, with antialiasing off-ish (it is a pixel font).</summary>
     public static SKFont At(float size) => new(Face, size) { Edging = SKFontEdging.Antialias, Embolden = true };
 
-    /// <summary>The pixel face when it can draw every glyph of the text, else the system default (CJK nicknames).</summary>
+    /// <summary>The pixel face when it can draw every glyph of the text, else the bundled fallback face (CJK nicknames).</summary>
     public static SKFont For(string text, float size)
     {
         var face = Face;
-        var covered = text.All(c => face.GetGlyph(c) != 0);
-        return new SKFont(covered ? face : SKTypeface.Default, size) { Edging = SKFontEdging.Antialias, Embolden = true };
+        using var probe = new SKFont(face);
+        var covered = text.All(c => probe.GetGlyph(c) != 0);
+        return new SKFont(covered ? face : FallbackFace, size) { Edging = SKFontEdging.Antialias, Embolden = true };
     }
 }

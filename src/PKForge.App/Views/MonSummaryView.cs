@@ -196,7 +196,7 @@ public sealed class MonSummaryView : ContentView
     private SKSize BeginDesign(SKCanvas canvas, SKImageInfo info, View view)
     {
         canvas.Clear(SKColors.Transparent);
-        var pxPerDp = view.Width > 0 ? (float)(info.Width / view.Width) : (float)Math.Max(1, DeviceDisplay.MainDisplayInfo.Density);
+        var pxPerDp = ScreenMetrics.CanvasDensity(view, info);
         var scale = pxPerDp * _unit;
         canvas.Scale(scale);
         return new SKSize(info.Width / scale, info.Height / scale);
@@ -220,6 +220,7 @@ public sealed class MonSummaryView : ContentView
     private SKPoint _touchStart;
     private double _touchStartScroll;
     private bool _dragging, _swiping;
+    private bool _touchActive;
     private readonly List<(long Ms, float Y)> _touchTrail = new();
     private IDispatcherTimer? _fling;
     private double _flingVelocity; // design pixels per ms
@@ -231,13 +232,19 @@ public sealed class MonSummaryView : ContentView
     private void OnPageTouch(object? sender, SKTouchEventArgs args)
     {
         args.Handled = true;
-        var widthPx = _page.CanvasSize.Width;
-        var density = widthPx > 0 && _page.Width > 0 ? (float)(widthPx / _page.Width) : 1f;
+        var density = ScreenMetrics.PaintedDensity(_page);
         var point = new SKPoint(args.Location.X / density, args.Location.Y / density);
         var now = Environment.TickCount64;
         switch (args.ActionType)
         {
+            case SKTouchAction.WheelChanged:
+                StopFling();
+                this.AbortAnimation(ScrollAnimation);
+                var wheelUnits = (args.WheelDelta / density) / _unit;
+                ScrollTo(_scrollY - wheelUnits);
+                break;
             case SKTouchAction.Pressed:
+                _touchActive = true;
                 StopFling();
                 this.AbortAnimation(ScrollAnimation);
                 _touchStart = point;
@@ -247,6 +254,7 @@ public sealed class MonSummaryView : ContentView
                 _touchTrail.Add((now, point.Y));
                 break;
             case SKTouchAction.Moved:
+                if (!_touchActive) break;
                 var dx = point.X - _touchStart.X;
                 var dy = point.Y - _touchStart.Y;
                 if (!_dragging && !_swiping && Math.Max(Math.Abs(dx), Math.Abs(dy)) > TouchSlopDp)
@@ -263,12 +271,15 @@ public sealed class MonSummaryView : ContentView
                 }
                 break;
             case SKTouchAction.Released:
+                if (!_touchActive) break;
+                _touchActive = false;
                 if (_dragging) StartFling(now);
                 else if (_swiping && Math.Abs(point.X - _touchStart.X) > SwipeTurnDp)
                     TurnPage(point.X < _touchStart.X ? 1 : -1, raise: true);
                 _dragging = _swiping = false;
                 break;
             case SKTouchAction.Cancelled:
+                _touchActive = false;
                 _dragging = _swiping = false;
                 break;
         }
@@ -423,8 +434,9 @@ public sealed class MonSummaryView : ContentView
     }
 
     /// <summary>
-    /// Showdown's static front sprite for the exact form (shiny when shiny), trimmed and
-    /// scaled by a whole number so its pixels stay square; PKHeX's art when Showdown has none.
+    /// The HOME render when <see cref="HomeRender.Active"/>; otherwise, or when HOME has none,
+    /// Showdown's static front sprite for the exact form (shiny when shiny), trimmed and scaled
+    /// by a whole number so its pixels stay square; PKHeX's art when Showdown has none.
     /// </summary>
     private void PaintPokemon(SKCanvas c, float cx, float cy, MonSummary s)
     {
@@ -440,6 +452,16 @@ public sealed class MonSummaryView : ContentView
             c.DrawCircle(egg.MidX - eh * 0.12f, egg.MidY - eh * 0.12f, eh * 0.08f, spot);
             c.DrawCircle(egg.MidX + eh * 0.14f, egg.MidY + eh * 0.08f, eh * 0.1f, spot);
             return;
+        }
+        if (HomeRender.Active)
+        {
+            const float box = 460f;
+            if (!HomeRender.TryGet(c, _sprites, s.Look, box, Redraw, out var render)) return;
+            if (render is not null)
+            {
+                HomeRender.DrawCentered(c, render, box, cx, cy);
+                return;
+            }
         }
         if (!_sprites.TryGetShowdownFront(s.Look, Redraw, out var sprite)) return;
         if (sprite is null)
@@ -470,14 +492,14 @@ public sealed class MonSummaryView : ContentView
         }
         SKPath Polygon(Func<int, float> r)
         {
-            var path = new SKPath();
+            using var builder = new SKPathBuilder();
             for (var i = 0; i < 6; i++)
             {
                 var p = Point(i, r(i));
-                if (i == 0) path.MoveTo(p); else path.LineTo(p);
+                if (i == 0) builder.MoveTo(p); else builder.LineTo(p);
             }
-            path.Close();
-            return path;
+            builder.Close();
+            return builder.Detach();
         }
 
         using (var back = Polygon(_ => radius + 20))
@@ -1028,32 +1050,32 @@ public sealed class MonSummaryView : ContentView
     /// <summary>A tab: rounded on the left, its right edge slanting out toward the bottom.</summary>
     private static SKPath Tab(SKRect r, float radius, float slant)
     {
-        var path = new SKPath();
-        path.MoveTo(r.Left + radius, r.Top);
-        path.LineTo(r.Right - slant, r.Top);
-        path.LineTo(r.Right, r.Bottom);
-        path.LineTo(r.Left + radius, r.Bottom);
+        using var builder = new SKPathBuilder();
+        builder.MoveTo(r.Left + radius, r.Top);
+        builder.LineTo(r.Right - slant, r.Top);
+        builder.LineTo(r.Right, r.Bottom);
+        builder.LineTo(r.Left + radius, r.Bottom);
         if (radius > 0)
         {
-            path.ArcTo(new SKRect(r.Left, r.Bottom - 2 * radius, r.Left + 2 * radius, r.Bottom), 90, 90, false);
-            path.LineTo(r.Left, r.Top + radius);
-            path.ArcTo(new SKRect(r.Left, r.Top, r.Left + 2 * radius, r.Top + 2 * radius), 180, 90, false);
+            builder.ArcTo(new SKRect(r.Left, r.Bottom - 2 * radius, r.Left + 2 * radius, r.Bottom), 90, 90, false);
+            builder.LineTo(r.Left, r.Top + radius);
+            builder.ArcTo(new SKRect(r.Left, r.Top, r.Left + 2 * radius, r.Top + 2 * radius), 180, 90, false);
         }
-        else path.LineTo(r.Left, r.Top);
-        path.Close();
-        return path;
+        else builder.LineTo(r.Left, r.Top);
+        builder.Close();
+        return builder.Detach();
     }
 
     /// <summary>A parallelogram leaning right: the tab strip and the active tab.</summary>
     private static SKPath Parallelogram(SKRect r, float slant)
     {
-        var path = new SKPath();
-        path.MoveTo(r.Left + slant, r.Top);
-        path.LineTo(r.Right, r.Top);
-        path.LineTo(r.Right - slant, r.Bottom);
-        path.LineTo(r.Left, r.Bottom);
-        path.Close();
-        return path;
+        using var builder = new SKPathBuilder();
+        builder.MoveTo(r.Left + slant, r.Top);
+        builder.LineTo(r.Right, r.Top);
+        builder.LineTo(r.Right - slant, r.Bottom);
+        builder.LineTo(r.Left, r.Bottom);
+        builder.Close();
+        return builder.Detach();
     }
 
     private static void Fill(SKCanvas c, SKPath path, SKColor top, SKColor bottom)

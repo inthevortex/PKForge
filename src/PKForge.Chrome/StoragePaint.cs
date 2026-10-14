@@ -218,12 +218,13 @@ public static class StoragePaint
 
         var banner = BannerRect(r, unit);
         var slant = 26f * unit;
-        using var path = new SKPath();
-        path.MoveTo(banner.Left, banner.Top);
-        path.LineTo(banner.Right - slant, banner.Top);
-        path.LineTo(banner.Right, banner.Bottom);
-        path.LineTo(banner.Left + slant, banner.Bottom);
-        path.Close();
+        using var builder = new SKPathBuilder();
+        builder.MoveTo(banner.Left, banner.Top);
+        builder.LineTo(banner.Right - slant, banner.Top);
+        builder.LineTo(banner.Right, banner.Bottom);
+        builder.LineTo(banner.Left + slant, banner.Bottom);
+        builder.Close();
+        using var path = builder.Detach();
         using (var gradient = new SKPaint
         {
             IsAntialias = true,
@@ -248,20 +249,21 @@ public static class StoragePaint
     {
         var thickness = 11f * unit;
         var arm = 18f * unit;
-        using var path = new SKPath();
+        using var builder = new SKPathBuilder();
         foreach (var offset in new[] { -16f, 14f })
         {
             var ox = cx + offset * unit;
             var back = ox - direction * arm / 2;
             var tip = ox + direction * arm / 2;
-            path.MoveTo(back, cy - arm);
-            path.LineTo(back + direction * thickness, cy - arm);
-            path.LineTo(tip + direction * thickness, cy);
-            path.LineTo(back + direction * thickness, cy + arm);
-            path.LineTo(back, cy + arm);
-            path.LineTo(tip, cy);
-            path.Close();
+            builder.MoveTo(back, cy - arm);
+            builder.LineTo(back + direction * thickness, cy - arm);
+            builder.LineTo(tip + direction * thickness, cy);
+            builder.LineTo(back + direction * thickness, cy + arm);
+            builder.LineTo(back, cy + arm);
+            builder.LineTo(tip, cy);
+            builder.Close();
         }
+        using var path = builder.Detach();
         using var ink = Fill(enabled ? Pksm.Ink : Pksm.Ink.WithAlpha(0x40));
         c.DrawPath(path, ink);
     }

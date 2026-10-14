@@ -22,13 +22,14 @@ internal sealed class TouchScroller
     private readonly Func<float> _max;
     private readonly Func<float> _viewport;
     private readonly Func<SKRect> _track;
-    private readonly float _slop;
-    private readonly float _grabWidth;
+    private readonly Func<float> _slop;
+    private readonly Func<float> _grabWidth;
 
     private SKPoint _start;
     private float _startOffset;
     private float _grab;
     private bool _dragging;
+    private bool _active;
     private readonly List<(long Ms, float Y)> _trail = [];
     private IDispatcherTimer? _fling;
     private IDispatcherTimer? _fade;
@@ -36,10 +37,10 @@ internal sealed class TouchScroller
     private long _lastActive = long.MinValue / 2;
 
     /// <param name="track">The scrollbar's track, where the thumb runs.</param>
-    /// <param name="slop">How far a finger moves before a press becomes a drag.</param>
-    /// <param name="grabWidth">How far left of the track a press still grabs the thumb.</param>
+    /// <param name="slop">How far a finger moves before a press becomes a drag, read each time it is used.</param>
+    /// <param name="grabWidth">How far left of the track a press still grabs the thumb, read each time it is used.</param>
     public TouchScroller(IDispatcher dispatcher, Func<float> offset, Action<float> scrollTo, Func<float> max,
-        Func<float> viewport, Func<SKRect> track, float slop, float grabWidth)
+        Func<float> viewport, Func<SKRect> track, Func<float> slop, Func<float> grabWidth)
     {
         _dispatcher = dispatcher;
         _offset = offset;
@@ -90,20 +91,32 @@ internal sealed class TouchScroller
         if (max <= 0) return SKRect.Empty;
         var track = _track();
         var viewport = _viewport();
-        var length = Math.Max(Math.Min(track.Height, 48 * Math.Max(1, _slop / 8)), track.Height * viewport / (viewport + max));
+        var length = Math.Max(Math.Min(track.Height, 48 * Math.Max(1, _slop() / 8)), track.Height * viewport / (viewport + max));
         var top = track.Top + (track.Height - length) * Math.Clamp(_offset() / max, 0, 1);
         return new SKRect(track.Left, top, track.Right, top + length);
     }
 
     public void Stop() => _fling?.Stop();
 
+    /// <summary>Scrolls by a mouse wheel delta (positive scrolls up), keeping the offset within the list.</summary>
+    public void HandleWheel(float delta)
+    {
+        Stop();
+        Touched();
+        _scrollTo(Math.Clamp(_offset() - delta, 0, _max()));
+    }
+
     /// <summary>Feeds one touch event; returns the point of a tap (a press released without dragging).</summary>
-    public SKPoint? Handle(SKTouchAction action, SKPoint point)
+    public SKPoint? Handle(SKTouchAction action, SKPoint point, float wheelDelta = 0)
     {
         var now = Environment.TickCount64;
         switch (action)
         {
+            case SKTouchAction.WheelChanged:
+                if (wheelDelta != 0) HandleWheel(wheelDelta);
+                return null;
             case SKTouchAction.Pressed:
+                _active = true;
                 Stop();
                 // Only a thumb the player can see is grabbed; a hidden one leaves the press to the list.
                 var visible = Visibility > 0;
@@ -114,7 +127,7 @@ internal sealed class TouchScroller
                 _trail.Clear();
                 _trail.Add((now, point.Y));
                 var thumb = Thumb();
-                if (visible && !thumb.IsEmpty && point.X >= _track().Left - _grabWidth)
+                if (visible && !thumb.IsEmpty && point.X >= _track().Left - _grabWidth())
                 {
                     // On the thumb: hold it where it was taken. On the track: the thumb jumps under the finger.
                     HoldingThumb = true;
@@ -123,9 +136,10 @@ internal sealed class TouchScroller
                 }
                 return null;
             case SKTouchAction.Moved:
+                if (!_active) return null;
                 Touched();
                 if (HoldingThumb) { MoveThumb(point.Y); return null; }
-                if (!_dragging && Math.Abs(point.Y - _start.Y) > _slop) _dragging = true;
+                if (!_dragging && Math.Abs(point.Y - _start.Y) > _slop()) _dragging = true;
                 if (_dragging)
                 {
                     _scrollTo(Math.Clamp(_startOffset - (point.Y - _start.Y), 0, _max()));
@@ -134,11 +148,14 @@ internal sealed class TouchScroller
                 }
                 return null;
             case SKTouchAction.Released:
+                if (!_active) return null;
+                _active = false;
                 Touched();
                 if (HoldingThumb) { HoldingThumb = false; _scrollTo(_offset()); return null; }
                 if (_dragging) { _dragging = false; Fling(now); return null; }
                 return point;
             case SKTouchAction.Cancelled:
+                _active = false;
                 HoldingThumb = _dragging = false;
                 return null;
             default:
@@ -162,7 +179,7 @@ internal sealed class TouchScroller
         var recent = _trail.Where(t => now - t.Ms <= 100).ToList();
         if (recent.Count < 2 || recent[^1].Ms == recent[0].Ms) return;
         _velocity = -(recent[^1].Y - recent[0].Y) / (recent[^1].Ms - recent[0].Ms);
-        if (Math.Abs(_velocity) * 16 < _slop * 0.25f) return;
+        if (Math.Abs(_velocity) * 16 < _slop() * 0.25f) return;
         if (_fling is null)
         {
             _fling = _dispatcher.CreateTimer();
@@ -173,7 +190,7 @@ internal sealed class TouchScroller
                 _velocity *= FlingFriction;
                 Touched();
                 _scrollTo(target);
-                if (target <= 0 || target >= _max() || Math.Abs(_velocity) * 16 < _slop * 0.05f) _fling!.Stop();
+                if (target <= 0 || target >= _max() || Math.Abs(_velocity) * 16 < _slop() * 0.05f) _fling!.Stop();
             };
         }
         _fling.Start();

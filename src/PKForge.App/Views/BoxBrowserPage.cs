@@ -22,6 +22,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
     private readonly BoxBrowserViewModel _viewModel;
     private readonly ISpriteService _sprites;
     private readonly ThemeService _theme;
+    private readonly IAppPlatform _appPlatform;
     private readonly SKCanvasView _canvas;
     private readonly SKCanvasView _boxBar;
     private readonly SKCanvasView _boxNeighbors;
@@ -66,9 +67,11 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
         _partyPulseTimer = null;
     }
 
-    public BoxBrowserPage(BoxBrowserViewModel viewModel, ISpriteService sprites, ThemeService theme)
+    public BoxBrowserPage(BoxBrowserViewModel viewModel, ISpriteService sprites, ThemeService theme, IAppPlatform? appPlatform = null)
     {
         _viewModel = viewModel;
+        _appPlatform = appPlatform ?? IPlatformApplication.Current?.Services.GetRequiredService<IAppPlatform>()
+            ?? throw new InvalidOperationException("IAppPlatform is unavailable.");
         _viewModel.ConfirmHackRisk = async _ =>
         {
             var choice = await PadMenu.ShowAsync(_hostGrid, RomHackNotice.Title, RomHackNotice.Warning,
@@ -452,36 +455,15 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
         }
     }
 
-    /// <summary>The NDS12 face (the chrome's PixelUI voice), cached once for Skia text.</summary>
-    private static SKTypeface _pixelTypeface = null!;
+    private static SKTypeface? _pixelTypeface;
 
-    internal static SKTypeface PixelTypeface()
-    {
-        if (_pixelTypeface is not null) return _pixelTypeface;
-        try
-        {
-            // Bundled font copied to cache once (the ball-icon pattern), then opened by path.
-            var cache = System.IO.Path.Combine(FileSystem.CacheDirectory, "NDS12.ttf");
-            if (!File.Exists(cache))
-            {
-                using var asset = FileSystem.OpenAppPackageFileAsync("NDS12.ttf").GetAwaiter().GetResult();
-                using var output = File.Create(cache);
-                asset.CopyTo(output);
-            }
-            _pixelTypeface = SKTypeface.FromFile(cache);
-        }
-        catch
-        {
-            // ignored: fall back to the bold system face below
-        }
-        _pixelTypeface ??= SKTypeface.FromFamilyName(null, SKFontStyle.Bold);
-        return _pixelTypeface;
-    }
-
+    /// <summary>The NDS12 face (the chrome's PixelUI voice) for Skia text, or a bold system face when it cannot load.</summary>
+    internal static SKTypeface PixelTypeface() =>
+        _pixelTypeface ??= PixelFont.LoadedFace ?? SKTypeface.FromFamilyName(null, SKFontStyle.Bold);
 
     // The box and the editor panel split the width as the mockup does: 1072 to 740.
     private static readonly GridLength PanelWidth = new(740, GridUnitType.Star);
-    private static readonly double PanelSpacing = Design(32);
+    private static double PanelSpacing => Design(32);
 
     private View BuildSidePanel()
     {
@@ -1049,13 +1031,11 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
             return;
         }
         const int AnyItem = int.MinValue;
-        var directory = Path.Combine(FileSystem.AppDataDirectory, "items");
         var items = new List<PickItem> { new(AnyItem, "Any held item", Detail: $"{tally.Sum(t => t.Count)} Pokémon") };
         foreach (var (id, n) in tally)
         {
             var name = HeldItemSearch.NameOf(itemNames, id);
-            var cached = Path.Combine(directory, ItemArt.Slug(name) + ".png");
-            items.Add(new PickItem(id, name, File.Exists(cached) ? cached : null, $"{n} Pokémon"));
+            items.Add(new PickItem(id, name, ItemArt.CachedPathOrNull(name), $"{n} Pokémon"));
         }
         var item = await PickerMenu.ShowAsync(_hostGrid, "Find held item", items);
         if (item is null) return;
@@ -1249,11 +1229,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
                 Directory.CreateDirectory(directory);
                 var paths = _viewModel.BulkExport(directory);
                 if (paths.Count == 0) return;
-                await Share.Default.RequestAsync(new ShareMultipleFilesRequest
-                {
-                    Title = $"{paths.Count} Pokémon",
-                    Files = paths.Select(p => new ShareFile(p)).ToList(),
-                });
+                await _appPlatform.ExportFilesAsync($"{paths.Count} Pokémon", paths);
                 _viewModel.Status = $"Exported {paths.Count} Pokémon.";
                 break;
             }
@@ -1493,7 +1469,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
             case "Share as file":
                 var path = System.IO.Path.Combine(FileSystem.CacheDirectory, $"box-{_viewModel.BoxIndex + 1}.txt");
                 await File.WriteAllTextAsync(path, text);
-                await Share.Default.RequestAsync(new ShareFileRequest { Title = "Showdown team", File = new ShareFile(path) });
+                await _appPlatform.ExportFilesAsync("Showdown team", [path]);
                 return;
         }
     }
@@ -1689,7 +1665,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
         if (text.Length == 0) { _viewModel.Status = "This box is empty"; return; }
         var path = Path.Combine(FileSystem.CacheDirectory, $"box-{_viewModel.BoxIndex + 1:00}-showdown.txt");
         File.WriteAllText(path, text);
-        await Share.Default.RequestAsync(new ShareFileRequest { Title = $"Box {_viewModel.BoxIndex + 1:00} Showdown", File = new ShareFile(path) });
+        await _appPlatform.ExportFilesAsync($"Box {_viewModel.BoxIndex + 1:00} Showdown", [path]);
     }
 
     private Task ImportShowdownSetsToBoxAsync() => ImportShowdownPreviewedAsync("Import Showdown sets");
@@ -2052,11 +2028,9 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
         {
             var path = System.IO.Path.Combine(FileSystem.CacheDirectory, "pkforge-audit.txt");
             await File.WriteAllTextAsync(path, text);
-            await Share.Default.RequestAsync(new ShareFileRequest
-            {
-                Title = "PKForge audit report",
-                File = new ShareFile(path),
-            });
+            var platform = IPlatformApplication.Current?.Services.GetRequiredService<IAppPlatform>()
+                ?? throw new InvalidOperationException("IAppPlatform is unavailable.");
+            await platform.ExportFilesAsync("PKForge audit report", [path]);
         }
         catch (Exception error)
         {
@@ -2465,11 +2439,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
             if (string.IsNullOrWhiteSpace(extension)) extension = ".sav";
             var path = Path.Combine(FileSystem.CacheDirectory, $"{baseName}-modified{extension}");
             await File.WriteAllBytesAsync(path, session.Serialize().ToArray());
-            await Share.Default.RequestAsync(new ShareFileRequest
-            {
-                Title = "Export modified save",
-                File = new ShareFile(path),
-            });
+            await _appPlatform.ExportFilesAsync("Export modified save", [path]);
             _viewModel.Status = $"Exported {Path.GetFileName(path)}";
         }
         catch (Exception error)
@@ -3026,13 +2996,9 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
             // Open the picker IMMEDIATELY with cached-or-placeholder art. The old flow
             // blocked on fetching every sprite first, which on a cold cache read as
             // "the button does nothing" for the better part of a minute.
-            var itemDirectory = System.IO.Path.Combine(FileSystem.AppDataDirectory, "items");
             var placeholder = ItemArt.PlaceholderPath();
             var legal = legalIds.Select(id =>
-            {
-                var cached = System.IO.Path.Combine(itemDirectory, ItemArt.Slug(gameItems[id]) + ".png");
-                return new PickItem(id, gameItems[id], File.Exists(cached) ? cached : placeholder);
-            }).ToList();
+                new PickItem(id, gameItems[id], ItemArt.CachedPathOrNull(gameItems[id]) ?? placeholder)).ToList();
             Report($"Adding to {pouchName} - {legal.Count} items");
             _ = Task.Run(async () =>
             {
@@ -3499,7 +3465,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
                 HorizontalOptions = LayoutOptions.Center,
             };
             var canvas = new SKCanvasView { InputTransparent = true };
-            canvas.PaintSurface += (_, args) =>
+            canvas.PaintSurface += (s, args) =>
             {
                 var c = args.Surface.Canvas;
                 c.Clear(SKColors.Transparent);
@@ -3510,7 +3476,8 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
                 var r = new SKRect(cx - radius, cy - radius, cx + radius, cy + radius);
                 using var fill = new SKPaint { Color = Pksm.BagNavy, IsAntialias = true };
                 using var inner = new SKPaint { Color = Pksm.BagNavyDeep, IsAntialias = true };
-                using var rim = new SKPaint { Color = Pksm.LogoGrid, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f * (float)DeviceDisplay.MainDisplayInfo.Density };
+                var density = ScreenMetrics.CanvasDensity(s, info);
+                using var rim = new SKPaint { Color = Pksm.LogoGrid, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f * density };
                 using var arm = new SKPaint { Color = Pksm.Ink, IsAntialias = true };
                 c.DrawOval(r, fill);
                 c.DrawOval(SKRect.Inflate(r, -1.5f, -1.5f), inner);
@@ -4213,11 +4180,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
             var export = session.ExportSlot(_viewModel.BoxIndex, slot);
             var path = System.IO.Path.Combine(FileSystem.CacheDirectory, export.FileName);
             await File.WriteAllBytesAsync(path, export.Data);
-            await Share.Default.RequestAsync(new ShareFileRequest
-            {
-                Title = export.FileName,
-                File = new ShareFile(path),
-            });
+            await _appPlatform.ExportFilesAsync(export.FileName, [path]);
             _viewModel.Status = $"Exported {export.FileName}";
         }
         catch (Exception error)
@@ -5082,14 +5045,12 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
     /// <summary>The held-item row: holdable items first with their effects, sprites where cached.</summary>
     private async Task OpenHeldItemPickerAsync(IGameDataService data)
     {
-        var directory = System.IO.Path.Combine(FileSystem.AppDataDirectory, "items");
         var placeholder = ItemArt.PlaceholderPath();
         string? Icon(int id)
         {
             var names = SaveItemNames(data);
             if ((uint)id >= (uint)names.Count) return placeholder;
-            var cached = System.IO.Path.Combine(directory, ItemArt.Slug(names[id]) + ".png");
-            return File.Exists(cached) ? cached : placeholder;
+            return ItemArt.CachedPathOrNull(names[id]) ?? placeholder;
         }
         var picked = await InfoPickers.ShowHeldItemsAsync(_hostGrid, "Held item", data, _sessionsFor(),
             ParseInt(GetVmString(nameof(BoxBrowserViewModel.EditHeldItem))), Icon);
@@ -5142,12 +5103,10 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
     private static List<PickItem> ItemsWithIcons(IReadOnlyList<string> names)
     {
         var items = new List<PickItem>(names.Count) { new(0, "(none)") };
-        var directory = System.IO.Path.Combine(FileSystem.AppDataDirectory, "items");
         for (var id = 1; id < names.Count; id++)
         {
             if (names[id].Length == 0) continue;
-            var cached = System.IO.Path.Combine(directory, ItemArt.Slug(names[id]) + ".png");
-            items.Add(new PickItem(id, names[id], File.Exists(cached) ? cached : ItemArt.PlaceholderPath()));
+            items.Add(new PickItem(id, names[id], ItemArt.CachedPathOrNull(names[id]) ?? ItemArt.PlaceholderPath()));
         }
         return items;
     }

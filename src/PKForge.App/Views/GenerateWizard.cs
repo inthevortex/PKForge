@@ -335,17 +335,18 @@ public static class GenerateWizard
             var height = args.Info.Height / scale;
 
             // The name banner.
-            using (var banner = new SKPath())
+            using (var bannerBuilder = new SKPathBuilder())
             {
                 var r = new SKRect(0, 8, DesignWidth - 20, 84);
-                banner.MoveTo(r.Left + 18, r.Top);
-                banner.LineTo(r.Right - 30, r.Top);
-                banner.LineTo(r.Right, r.Bottom);
-                banner.LineTo(r.Left + 18, r.Bottom);
-                banner.ArcTo(new SKRect(r.Left, r.Bottom - 36, r.Left + 36, r.Bottom), 90, 90, false);
-                banner.LineTo(r.Left, r.Top + 18);
-                banner.ArcTo(new SKRect(r.Left, r.Top, r.Left + 36, r.Top + 36), 180, 90, false);
-                banner.Close();
+                bannerBuilder.MoveTo(r.Left + 18, r.Top);
+                bannerBuilder.LineTo(r.Right - 30, r.Top);
+                bannerBuilder.LineTo(r.Right, r.Bottom);
+                bannerBuilder.LineTo(r.Left + 18, r.Bottom);
+                bannerBuilder.ArcTo(new SKRect(r.Left, r.Bottom - 36, r.Left + 36, r.Bottom), 90, 90, false);
+                bannerBuilder.LineTo(r.Left, r.Top + 18);
+                bannerBuilder.ArcTo(new SKRect(r.Left, r.Top, r.Left + 36, r.Top + 36), 180, 90, false);
+                bannerBuilder.Close();
+                using var banner = bannerBuilder.Detach();
                 using var fill = new SKPaint
                 {
                     IsAntialias = true,

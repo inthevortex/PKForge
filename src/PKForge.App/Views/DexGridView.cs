@@ -54,7 +54,7 @@ public sealed class DexGridView : SKCanvasView
         Touch += OnTouch;
         // Drag, flick with momentum, and a thumb you can grab, in canvas pixels.
         _scroller = new TouchScroller(Dispatcher, () => _scroll, ScrollTo, () => MaxScroll, () => CanvasSize.Height, Track,
-            slop: 10 * _unit, grabWidth: 40 * _unit);
+            slop: () => 10 * _unit, grabWidth: () => 40 * _unit);
     }
 
     /// <summary>The scrollbar's track along the right edge, in canvas pixels.</summary>
@@ -142,8 +142,7 @@ public sealed class DexGridView : SKCanvasView
         var width = CanvasSize.Width;
         if (width <= 0 || Math.Abs(width - _laidOutWidth) < 0.5f) return;
         _laidOutWidth = width;
-        var display = DeviceDisplay.MainDisplayInfo;
-        _unit = (float)(Math.Max(display.Width, display.Height) / 1920.0);
+        _unit = (float)(ScreenMetrics.LongSidePx / 1920.0);
         if (_unit <= 0) _unit = 1;
         var cellW = CellWidth * _unit;
         var cellH = CellHeight * _unit;
@@ -331,7 +330,7 @@ public sealed class DexGridView : SKCanvasView
     {
         args.Handled = true;
         EnsureLayout();
-        if (_scroller.Handle(args.ActionType, args.Location) is { } tap) TapAt(tap);
+        if (_scroller.Handle(args.ActionType, args.Location, args.WheelDelta) is { } tap) TapAt(tap);
         else if (args.ActionType is SKTouchAction.Pressed or SKTouchAction.Released) InvalidateSurface();
     }
 

@@ -6,7 +6,13 @@ using PKForge.App.Views;
 using PKForge.Domain;
 using PKForge.Engine;
 using PKForge.Infrastructure;
+#if ANDROID
 using SkiaSharp.Views.Maui.Controls.Hosting;
+#elif PKFORGE_DESKTOP
+using Avalonia.Controls.Maui;
+using PKForge.App.Platforms.Desktop;
+using SkiaSharp.Views.Maui.Controls.Hosting;
+#endif
 
 namespace PKForge.App;
 
@@ -18,10 +24,19 @@ public static class MauiProgram
         Services.AppLog.Install();
         var builder = MauiApp.CreateBuilder();
         App.Trace("CreateMauiApp enter");
-#if ANDROID
         Views.CapsuleSkin.Register();
+#if ANDROID
+        Platforms.Android.AndroidScrollTo.Register();
 #endif
-        builder.UseMauiApp<App>().UseSkiaSharp()
+        builder.UseMauiApp<App>()
+#if ANDROID
+            .UseSkiaSharp()
+#elif PKFORGE_DESKTOP
+            .UseAvaloniaApp()
+            .UseAvaloniaEssentials()
+            .UseAvaloniaSkiaSharp()
+            .UseDesktopZoom()
+#endif
             .ConfigureFonts(fonts =>
             {
                 fonts.AddFont("MPLUSRounded1c-Regular.ttf", "Rounded");
@@ -68,7 +83,12 @@ public static class MauiProgram
         builder.Services.AddSingleton<IMonInfoService, MonInfoService>();
         builder.Services.AddSingleton<IMonSummaryService, MonSummaryService>();
         builder.Services.AddSingleton<IEvolutionService, EvolutionService>();
-        builder.Services.AddSingleton<ISpriteService, SpriteService>();
+        builder.Services.AddSingleton<ISpriteService>(sp =>
+        {
+            _ = Task.Run(SpriteService.SweepStaleDownloads);
+            _ = Task.Run(ItemArt.WarmIconCache);
+            return new SpriteService();
+        });
         builder.Services.AddSingleton<PokeparkService>();
         builder.Services.AddSingleton<PokeparkJournalState>();
         builder.Services.AddSingleton<PokeparkSpriteService>();
@@ -81,9 +101,15 @@ public static class MauiProgram
         builder.Services.AddSingleton<GamepadRouter>();
         builder.Services.AddSingleton<SecondScreenState>();
         builder.Services.AddSingleton<SpritePackDownloader>();
+        builder.Services.AddSingleton<UpdateChecker>();
         builder.Services.AddSingleton<AppUpdateService>();
         builder.Services.AddSingleton<TransferService>();
 #if ANDROID
+        builder.Services.AddSingleton<PadInputPump>(sp => new PadInputPump(
+            sp.GetRequiredService<GamepadRouter>(),
+            onHaptic: () => { try { Microsoft.Maui.Devices.HapticFeedback.Default.Perform(Microsoft.Maui.Devices.HapticFeedbackType.Click); } catch { } },
+            dispatchToUi: action => Microsoft.Maui.ApplicationModel.MainThread.BeginInvokeOnMainThread(action)
+        ));
         builder.Services.AddSingleton<ISaveFileAccess, AndroidSafFileAccess>();
         builder.Services.AddSingleton<Platforms.Android.MusicPlayer>();
         builder.Services.AddSingleton<IMusicPlayer>(sp => sp.GetRequiredService<Platforms.Android.MusicPlayer>());
@@ -91,7 +117,50 @@ public static class MauiProgram
         builder.Services.AddSingleton<ISecondaryDisplayHost, AndroidSecondaryDisplayHost>();
         builder.Services.AddSingleton<IFolderPicker, AndroidFolderPicker>();
         builder.Services.AddSingleton<IFolderFileAccess, AndroidFolderFileAccess>();
-        builder.Services.AddSingleton<IEmulatorDetectionService, AndroidEmulatorScanner>();
+        builder.Services.AddSingleton<AndroidEmulatorScanner>();
+        builder.Services.AddSingleton<IEmulatorDetectionService>(sp => sp.GetRequiredService<AndroidEmulatorScanner>());
+        builder.Services.AddSingleton<IIncrementalEmulatorDetectionService>(sp => sp.GetRequiredService<AndroidEmulatorScanner>());
+        builder.Services.AddSingleton<IEmulatorRootDiscovery, NullEmulatorRootDiscovery>();
+        builder.Services.AddSingleton<IAppPlatform, Platforms.Android.AndroidAppPlatform>();
+        builder.Services.AddSingleton<IUpdateInstaller, Platforms.Android.AndroidUpdateInstaller>();
+#elif PKFORGE_DESKTOP
+        builder.Services.AddSingleton<PadInputPump>(sp => new PadInputPump(
+            sp.GetRequiredService<GamepadRouter>(),
+            onHaptic: null,
+            dispatchToUi: action => Avalonia.Threading.Dispatcher.UIThread.Post(action)
+        ));
+        builder.Services.AddSingleton<ISaveFileAccess, Platforms.Desktop.PosixSaveFileAccess>();
+        builder.Services.AddSingleton<IMusicPlayer, Platforms.Desktop.SdlMixerMusicPlayer>();
+        builder.Services.AddSingleton<IDocumentPicker, Platforms.Desktop.DesktopDocumentPicker>();
+        builder.Services.AddSingleton<ISecondaryDisplayHost, Platforms.Desktop.NullSecondaryDisplayHost>();
+        builder.Services.AddSingleton<IFolderPicker, Platforms.Desktop.DesktopFolderPicker>();
+        builder.Services.AddSingleton<IFolderFileAccess, Platforms.Desktop.PosixFolderFileAccess>();
+        builder.Services.AddSingleton<Platforms.Desktop.DesktopEmulatorScanner>();
+        builder.Services.AddSingleton<IEmulatorDetectionService>(sp => sp.GetRequiredService<Platforms.Desktop.DesktopEmulatorScanner>());
+        builder.Services.AddSingleton<IIncrementalEmulatorDetectionService>(sp => sp.GetRequiredService<Platforms.Desktop.DesktopEmulatorScanner>());
+        builder.Services.AddSingleton<IEmulatorRootDiscovery, LinuxEmulatorRootDiscovery>();
+        builder.Services.AddSingleton<IAppPlatform, Platforms.Desktop.DesktopAppPlatform>();
+        builder.Services.AddSingleton<IUpdateInstaller, Platforms.Desktop.DesktopUpdateInstaller>();
+
+        var desktopDisplay = new Platforms.Desktop.DesktopDeviceDisplay();
+        builder.Services.AddSingleton<Microsoft.Maui.Devices.IDeviceDisplay>(desktopDisplay);
+        typeof(Microsoft.Maui.Devices.DeviceDisplay).GetMethod("SetCurrent", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.Invoke(null, [desktopDisplay]);
+
+        var desktopAppInfo = new Platforms.Desktop.DesktopAppInfo();
+        builder.Services.AddSingleton<Microsoft.Maui.ApplicationModel.IAppInfo>(desktopAppInfo);
+        typeof(Microsoft.Maui.ApplicationModel.AppInfo).GetMethod("SetCurrent", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.Invoke(null, [desktopAppInfo]);
+
+        var desktopLauncher = new Platforms.Desktop.DesktopLauncher();
+        builder.Services.AddSingleton<Microsoft.Maui.ApplicationModel.ILauncher>(desktopLauncher);
+        typeof(Microsoft.Maui.ApplicationModel.Launcher).GetMethod("SetDefault", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.Invoke(null, [desktopLauncher]);
+
+        var desktopClipboard = new Platforms.Desktop.DesktopClipboard();
+        builder.Services.AddSingleton<Microsoft.Maui.ApplicationModel.DataTransfer.IClipboard>(desktopClipboard);
+        typeof(Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard).GetMethod("SetDefault", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.Invoke(null, [desktopClipboard]);
+
+        var desktopConnectivity = new Platforms.Desktop.DesktopConnectivity();
+        builder.Services.AddSingleton<Microsoft.Maui.Networking.IConnectivity>(desktopConnectivity);
+        typeof(Microsoft.Maui.Networking.Connectivity).GetMethod("SetCurrent", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.Invoke(null, [desktopConnectivity]);
 #endif
         builder.Services.AddSingleton<IWatchedRootStore, PreferencesWatchedRootStore>();
         builder.Services.AddSingleton<BoxBrowserViewModel>();

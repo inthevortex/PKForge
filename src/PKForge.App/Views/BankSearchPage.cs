@@ -45,6 +45,7 @@ public sealed class BankSearchPage : IPadPagingHandler
     private readonly List<BankEntry> _all;
     private readonly List<BankEntry> _view = [];
     private readonly SKCanvasView _canvas;
+    private readonly WheelSteps _wheel = new();
     private readonly Entry _text;
     private readonly Label _count;
     private readonly Label _cursorInfo;
@@ -421,7 +422,6 @@ public sealed class BankSearchPage : IPadPagingHandler
     {
         var tally = HeldItemSearch.Tally(_all.Select(_facts.HeldItem));
         var holders = tally.Sum(t => t.Count);
-        var directory = Path.Combine(FileSystem.AppDataDirectory, "items");
         var items = new List<PickItem>
         {
             new(0, "All (no item filter)"),
@@ -430,8 +430,7 @@ public sealed class BankSearchPage : IPadPagingHandler
         foreach (var (id, count) in tally)
         {
             var name = HeldItemSearch.NameOf(_data.ItemNames, id);
-            var cached = Path.Combine(directory, ItemArt.Slug(name) + ".png");
-            items.Add(new PickItem(id, name, File.Exists(cached) ? cached : null, $"{count} Pokémon"));
+            items.Add(new PickItem(id, name, ItemArt.CachedPathOrNull(name), $"{count} Pokémon"));
         }
         var current = _filter.HeldItemId ?? (_filter.HoldsItemOnly ? -1 : 0);
         var pick = await PickerMenu.ShowAsync(_host, "Held item", items, current);
@@ -663,6 +662,12 @@ public sealed class BankSearchPage : IPadPagingHandler
 
     private void Touch(object? sender, SKTouchEventArgs args)
     {
+        if (args.ActionType == SKTouchAction.WheelChanged)
+        {
+            args.Handled = true;
+            if (_wheel.Add(args.WheelDelta) is var steps and not 0) Page(Math.Sign(steps));
+            return;
+        }
         if (args.ActionType == SKTouchAction.Pressed) { args.Handled = true; return; }
         if (args.ActionType != SKTouchAction.Released) return;
         args.Handled = true;

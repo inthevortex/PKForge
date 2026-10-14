@@ -5,6 +5,14 @@ using Xunit;
 
 namespace PKForge.Engine.Tests;
 
+/// <summary>
+/// PKHeX's mystery gift tables and the archive's file-name index are process-wide, so the
+/// tests that swap in a temporary gallery run apart from the parallel tests.
+/// </summary>
+[CollectionDefinition(nameof(MysteryGiftDatabaseCollection), DisableParallelization = true)]
+public sealed class MysteryGiftDatabaseCollection;
+
+[Collection(nameof(MysteryGiftDatabaseCollection))]
 public sealed class EventDatabaseMetadataTests
 {
     [Fact]

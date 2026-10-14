@@ -4,7 +4,7 @@
 
 - Confirm the working tree and branch.
 - Confirm `main` is the authoritative release base.
-- Read `AGENTS.md` and, if present locally, `docs/HANDOFF.md`.
+- Read `docs/DEVELOPMENT.md` and, if present locally, `docs/HANDOFF.md`.
 - Update `ApplicationVersion` and `ApplicationDisplayVersion`.
 - Remove temporary diagnostics and development-only assets.
 - Keep `docs/HANDOFF.md`, local test data, and local tooling state out of the
@@ -14,16 +14,20 @@
 
 ```bash
 git diff --check
-/tmp/pkforge-dotnet/dotnet test tests/PKForge.Engine.Tests/PKForge.Engine.Tests.csproj --no-restore --nologo
-/tmp/pkforge-dotnet/dotnet test tests/PKForge.Domain.Tests/PKForge.Domain.Tests.csproj --no-restore --nologo
-/tmp/pkforge-dotnet/dotnet build src/PKForge.App/PKForge.App.csproj \
-  -f net10.0-android -r android-arm64 --no-restore --nologo
+dotnet test tests/PKForge.Engine.Tests
+dotnet test tests/PKForge.Domain.Tests
+dotnet test tests/PKForge.App.Tests
+dotnet build src/PKForge.App/PKForge.App.csproj -f net11.0-android
+dotnet build src/PKForge.App/PKForge.App.csproj -f net11.0
+tools/Packaging/package.sh
 ```
 
 - Verify the APK package ID and version.
 - Verify the release APK is signed by the permanent certificate.
 - Test save discovery, save mutation, PokéPark navigation, second-screen
   refresh, and Create Pokémon on a device.
+- Install a Linux package from `artifacts/` and test save discovery and editing
+  on the desktop.
 
 ## Publication
 

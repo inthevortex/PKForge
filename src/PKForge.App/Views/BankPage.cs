@@ -31,6 +31,7 @@ public sealed class BankPage : ContentPage, IPadPagingHandler
     private readonly BoxBrowserViewModel _boxViewModel; // for send-to-game and shared status
     private readonly BankFacts _facts;
     private readonly IGameDataService _data;
+    private readonly IAppPlatform _appPlatform;
     private readonly SKCanvasView _canvas;
     private readonly FrameInvalidator _frame;
     private readonly Grid _hostGrid;
@@ -49,13 +50,15 @@ public sealed class BankPage : ContentPage, IPadPagingHandler
     // The current box's slot->entry map, rebuilt only when the box or bank changes.
     private Dictionary<int, BankEntry> _boxEntries = new();
 
-    public BankPage(IBankService bank, ISpriteService sprites, BoxBrowserViewModel boxViewModel, IGameDataService data)
+    public BankPage(IBankService bank, ISpriteService sprites, BoxBrowserViewModel boxViewModel, IGameDataService data, IAppPlatform? appPlatform = null)
     {
         _bank = bank;
         _sprites = sprites;
         _boxViewModel = boxViewModel;
         _facts = new BankFacts(bank, data);
         _data = data;
+        _appPlatform = appPlatform ?? IPlatformApplication.Current?.Services.GetRequiredService<IAppPlatform>()
+            ?? throw new InvalidOperationException("IAppPlatform is unavailable.");
         Title = "Bank";
         NavigationPage.SetHasNavigationBar(this, false);
 
@@ -1570,7 +1573,7 @@ public sealed class BankPage : ContentPage, IPadPagingHandler
             var name = $"{entry.Info.Species:000} - {entry.Info.Nickname}{BankEntryFiles.ExtensionFor(entry.Info)}";
             var path = System.IO.Path.Combine(FileSystem.CacheDirectory, name);
             await File.WriteAllBytesAsync(path, bytes);
-            await Share.Default.RequestAsync(new ShareFileRequest { Title = name, File = new ShareFile(path) });
+            await _appPlatform.ExportFilesAsync(name, [path]);
         }
         catch (Exception error)
         {
@@ -1839,13 +1842,23 @@ public sealed class BankPage : ContentPage, IPadPagingHandler
         using (var rim = new SKPaint { Color = PksmPaint.Mix(glow, SKColors.White, 0.3f).WithAlpha(200), IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 3 })
             canvas.DrawRoundRect(SKRect.Inflate(card, -1.5f, -1.5f), 22, 22, rim);
 
+        var side = Math.Min(card.Width, card.Height) - 24;
+        if (SpriteStyleSetting.Offered)
+        {
+            // Prepared off the UI thread at the size the zoomed window shows it.
+            if (!HomeRender.TryGet(canvas, _sprites, look, side, _frame.Request, out var render)) return;
+            if (render is not null)
+            {
+                HomeRender.DrawCentered(canvas, render, side, card.MidX, card.MidY);
+                return;
+            }
+        }
         var home = _sprites.GetHome(look);
         if (home is null) _sprites.WarmHome(look, _frame.Request);
         var standIn = home is null && _sprites.HomeUnavailable(look);
         var picture = home ?? (standIn ? _sprites.GetSprite(look) : null);
         if (standIn && picture is null) _sprites.Warm(look, _frame.Request);
         if (picture is null) return;
-        var side = Math.Min(card.Width, card.Height) - 24;
         var scale = side / Math.Max(picture.Width, picture.Height);
         var w = picture.Width * scale;
         var h = picture.Height * scale;
