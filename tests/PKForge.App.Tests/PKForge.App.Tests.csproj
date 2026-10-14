@@ -15,14 +15,21 @@
   <ItemGroup>
     <Compile Include="../../src/PKForge.App/Services/PadInputPump.cs" />
     <Compile Include="../../src/PKForge.App/Services/GamepadRouting.cs" />
+    <Compile Include="../../src/PKForge.App/Services/IAppPlatform.cs" />
     <Compile Include="../../src/PKForge.App/Platforms/Desktop/AppVersionInfo.cs" />
+    <Compile Include="../../src/PKForge.App/Platforms/Desktop/HeldButtons.cs" />
+    <Compile Include="../../src/PKForge.App/Platforms/Desktop/GamepadInputState.cs" />
+    <Compile Include="../../src/PKForge.App/Platforms/Desktop/PadRumbleGate.cs" />
     <Compile Include="../../src/PKForge.App/Platforms/Desktop/DesktopExportFiles.cs" />
     <Compile Include="../../src/PKForge.App/Platforms/Desktop/DesktopExportPrompt.cs" />
+    <Compile Include="../../src/PKForge.App/Platforms/Desktop/SdlSubsystems.cs" />
+    <Compile Include="../../src/PKForge.App/Platforms/Desktop/SdlOwnerThread.cs" />
     <Compile Include="../../src/PKForge.App/Platforms/Desktop/LaunchTargets.cs" />
     <Compile Include="../../src/PKForge.App/Services/ItemIconMisses.cs" />
     <Compile Include="../../src/PKForge.App/Services/ItemIconFile.cs" />
     <Compile Include="../../src/PKForge.App/Services/ItemPlaceholder.cs" />
     <Compile Include="../../src/PKForge.App/Views/ProgressCoalescer.cs" />
+    <Compile Include="../../src/PKForge.App/Views/WheelSteps.cs" />
     <Compile Include="../../src/PKForge.App/Services/DesignMetrics.cs" />
     <Compile Include="../../src/PKForge.App/Platforms/Android/ScrollRequestTracker.cs" />
   </ItemGroup>

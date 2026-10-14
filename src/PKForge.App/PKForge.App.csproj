@@ -20,6 +20,7 @@
   </ItemGroup>
   <PropertyGroup Condition="'$(TargetFramework)' == 'net11.0'">
     <AssemblyName>PKForge</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DefineConstants>$(DefineConstants);PKFORGE_DESKTOP</DefineConstants>
     <AvaloniaControlsMauiGenerateDesktopProgram>false</AvaloniaControlsMauiGenerateDesktopProgram>
     <!-- The desktop head has no MAUI SDK to stamp the app version, so it rides on the assembly version. -->
@@ -56,6 +57,8 @@
     <PackageReference Include="Avalonia.Controls.Maui.SkiaSharp.Views" Version="11.0.0-rc.1.26252.343" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="ZXing.Net" Version="0.16.10" />
+    <PackageReference Include="ppy.SDL3-CS" Version="2026.1002.1" />
+    <PackageReference Include="ppy.SDL3_mixer-CS" Version="2026.1002.1" />
   </ItemGroup>
 
   <!-- Platform source file separation -->

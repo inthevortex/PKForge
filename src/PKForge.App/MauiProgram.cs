@@ -122,6 +122,11 @@ public static class MauiProgram
         builder.Services.AddSingleton<IAppPlatform, Platforms.Android.AndroidAppPlatform>();
         builder.Services.AddSingleton<IUpdateInstaller, Platforms.Android.AndroidUpdateInstaller>();
 #elif PKFORGE_DESKTOP
+        builder.Services.AddSingleton<PadInputPump>(sp => new PadInputPump(
+            sp.GetRequiredService<GamepadRouter>(),
+            onHaptic: null,
+            dispatchToUi: action => Avalonia.Threading.Dispatcher.UIThread.Post(action)
+        ));
         builder.Services.AddSingleton<ISaveFileAccess, Platforms.Desktop.PosixSaveFileAccess>();
         builder.Services.AddSingleton<IDocumentPicker, Platforms.Desktop.DesktopDocumentPicker>();
         builder.Services.AddSingleton<ISecondaryDisplayHost, Platforms.Desktop.NullSecondaryDisplayHost>();

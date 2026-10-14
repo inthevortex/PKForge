@@ -25,6 +25,12 @@ public sealed class DesktopAppPlatform : IAppPlatform
         }
     }
 
+    /// <summary>Where haptics go once the gamepad source runs; it decides whether a pad rumbles.</summary>
+    internal Action<HapticKind>? HapticSink { get; set; }
+
+    /// <summary>Called on the UI thread.</summary>
+    public void Haptic(HapticKind kind) => HapticSink?.Invoke(kind);
+
     /// <summary>
     /// Exports into ~/Documents/PKForge/exports after a pad-driven prompt that names the
     /// destination; the system Save dialog opens only when the user asks for it. Nothing is

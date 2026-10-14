@@ -45,6 +45,7 @@ public sealed class BankSearchPage : IPadPagingHandler
     private readonly List<BankEntry> _all;
     private readonly List<BankEntry> _view = [];
     private readonly SKCanvasView _canvas;
+    private readonly WheelSteps _wheel = new();
     private readonly Entry _text;
     private readonly Label _count;
     private readonly Label _cursorInfo;
@@ -661,6 +662,12 @@ public sealed class BankSearchPage : IPadPagingHandler
 
     private void Touch(object? sender, SKTouchEventArgs args)
     {
+        if (args.ActionType == SKTouchAction.WheelChanged)
+        {
+            args.Handled = true;
+            if (_wheel.Add(args.WheelDelta) is var steps and not 0) Page(Math.Sign(steps));
+            return;
+        }
         if (args.ActionType == SKTouchAction.Pressed) { args.Handled = true; return; }
         if (args.ActionType != SKTouchAction.Released) return;
         args.Handled = true;

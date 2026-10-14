@@ -1104,6 +1104,10 @@ public sealed class HomePage : ContentPage, IPadHandler
             new PadOption(PlatformText.LogsAction, IconPath: "export", Detail: PlatformText.LogsDetail),
             new PadOption(SecondScreenMode.UserOff ? "Second screen: OFF" : "Second screen: ON", IconPath: "compact",
                 Detail: "OFF keeps PKForge on one screen, so the other stays free (an emulator, say)."),
+#if PKFORGE_DESKTOP
+            new PadOption(Platforms.Desktop.SdlGamepadSource.RumbleEnabled ? "Controller rumble: ON" : "Controller rumble: OFF", IconPath: "game",
+                Detail: "ON gives the controller a short buzz for each press it makes."),
+#endif
             new PadOption(Services.HaXMode.IsOn ? "HaX mode: ON" : "HaX mode: OFF", IconPath: "hax",
                 Detail: "ON lets pickers offer any option, even illegal ones."),
             new PadOption(Services.HardcoreMode.IsOn ? "Hardcore mode: ON" : "Hardcore mode: OFF", IconPath: "hardcore",
@@ -1152,6 +1156,16 @@ public sealed class HomePage : ContentPage, IPadHandler
                     : host?.IsAvailable == true ? "Second screen on." : "Second screen on, but no second display is available.";
                 break;
             }
+#if PKFORGE_DESKTOP
+            case "Controller rumble: ON" or "Controller rumble: OFF":
+            {
+                var rumble = !Platforms.Desktop.SdlGamepadSource.RumbleEnabled;
+                Platforms.Desktop.SdlGamepadSource.RumbleEnabled = rumble;
+                AppLog.Info("input", rumble ? "Player turned controller rumble on" : "Player turned controller rumble off");
+                _viewModel.Status = rumble ? "Controller rumble is ON." : "Controller rumble is OFF.";
+                break;
+            }
+#endif
             case "Scan report":
             {
                 var action = await PadMenu.ShowAsync(_hostGrid, "Scan report", _viewModel.ScanReport, "Copy report", "Close");
