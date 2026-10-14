@@ -1028,13 +1028,11 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
             return;
         }
         const int AnyItem = int.MinValue;
-        var directory = Path.Combine(FileSystem.AppDataDirectory, "items");
         var items = new List<PickItem> { new(AnyItem, "Any held item", Detail: $"{tally.Sum(t => t.Count)} Pokémon") };
         foreach (var (id, n) in tally)
         {
             var name = HeldItemSearch.NameOf(itemNames, id);
-            var cached = Path.Combine(directory, ItemArt.Slug(name) + ".png");
-            items.Add(new PickItem(id, name, File.Exists(cached) ? cached : null, $"{n} Pokémon"));
+            items.Add(new PickItem(id, name, ItemArt.CachedPathOrNull(name), $"{n} Pokémon"));
         }
         var item = await PickerMenu.ShowAsync(_hostGrid, "Find held item", items);
         if (item is null) return;
@@ -3005,13 +3003,9 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
             // Open the picker IMMEDIATELY with cached-or-placeholder art. The old flow
             // blocked on fetching every sprite first, which on a cold cache read as
             // "the button does nothing" for the better part of a minute.
-            var itemDirectory = System.IO.Path.Combine(FileSystem.AppDataDirectory, "items");
             var placeholder = ItemArt.PlaceholderPath();
             var legal = legalIds.Select(id =>
-            {
-                var cached = System.IO.Path.Combine(itemDirectory, ItemArt.Slug(gameItems[id]) + ".png");
-                return new PickItem(id, gameItems[id], File.Exists(cached) ? cached : placeholder);
-            }).ToList();
+                new PickItem(id, gameItems[id], ItemArt.CachedPathOrNull(gameItems[id]) ?? placeholder)).ToList();
             Report($"Adding to {pouchName} - {legal.Count} items");
             _ = Task.Run(async () =>
             {
@@ -5062,14 +5056,12 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
     /// <summary>The held-item row: holdable items first with their effects, sprites where cached.</summary>
     private async Task OpenHeldItemPickerAsync(IGameDataService data)
     {
-        var directory = System.IO.Path.Combine(FileSystem.AppDataDirectory, "items");
         var placeholder = ItemArt.PlaceholderPath();
         string? Icon(int id)
         {
             var names = SaveItemNames(data);
             if ((uint)id >= (uint)names.Count) return placeholder;
-            var cached = System.IO.Path.Combine(directory, ItemArt.Slug(names[id]) + ".png");
-            return File.Exists(cached) ? cached : placeholder;
+            return ItemArt.CachedPathOrNull(names[id]) ?? placeholder;
         }
         var picked = await InfoPickers.ShowHeldItemsAsync(_hostGrid, "Held item", data, _sessionsFor(),
             ParseInt(GetVmString(nameof(BoxBrowserViewModel.EditHeldItem))), Icon);
@@ -5122,12 +5114,10 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
     private static List<PickItem> ItemsWithIcons(IReadOnlyList<string> names)
     {
         var items = new List<PickItem>(names.Count) { new(0, "(none)") };
-        var directory = System.IO.Path.Combine(FileSystem.AppDataDirectory, "items");
         for (var id = 1; id < names.Count; id++)
         {
             if (names[id].Length == 0) continue;
-            var cached = System.IO.Path.Combine(directory, ItemArt.Slug(names[id]) + ".png");
-            items.Add(new PickItem(id, names[id], File.Exists(cached) ? cached : ItemArt.PlaceholderPath()));
+            items.Add(new PickItem(id, names[id], ItemArt.CachedPathOrNull(names[id]) ?? ItemArt.PlaceholderPath()));
         }
         return items;
     }

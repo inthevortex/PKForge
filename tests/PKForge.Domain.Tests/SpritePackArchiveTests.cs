@@ -45,8 +45,9 @@ public sealed class SpritePackArchiveTests : IDisposable
     private string Archive => Path.Combine(Folder, "pack.zip");
 
     private Task<ArchiveResult> InstallAsync(FakeServer server, SpritePackArchive? pack = null, long free = long.MaxValue,
-        TimeSpan? stall = null, CancellationToken cancellationToken = default, Action<string, double>? onProgress = null) =>
-        new SpritePackArchiveInstaller(new HttpClient(server), _ => free, stall ?? NoStall)
+        TimeSpan? stall = null, CancellationToken cancellationToken = default, Action<string, double>? onProgress = null,
+        Action<string>? onUnpacked = null) =>
+        new SpritePackArchiveInstaller(new HttpClient(server), _ => free, stall ?? NoStall, onUnpacked)
             .InstallAsync(_root, pack ?? _pack, onProgress ?? ((_, _) => { }), cancellationToken);
 
     [Fact]
@@ -69,6 +70,22 @@ public sealed class SpritePackArchiveTests : IDisposable
         Assert.False(File.Exists(Partial));
         Assert.True(File.Exists(_pack.DoneMarker(_root)));
         Assert.Empty(Directory.EnumerateFiles(_root, "*.part", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task ReportsEachFileItUnpacksIntoPlace()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "home"));
+        await File.WriteAllBytesAsync(Path.Combine(_root, "home", "kept.png"), [1]);
+        var unpacked = new List<string>();
+
+        var result = await InstallAsync(new FakeServer(_zip), onUnpacked: unpacked.Add);
+
+        Assert.Equal(ArchiveOutcome.Installed, result.Outcome);
+        Assert.Equal(
+            [Path.Combine(_root, "home/6.png"), Path.Combine(_root, "showdown/6.gif"), Path.Combine(_root, "items/poke-ball.png")],
+            unpacked);
+        Assert.All(unpacked, path => Assert.True(File.Exists(path)));
     }
 
     [Fact]

@@ -56,7 +56,9 @@ public readonly record struct ArchiveResult(ArchiveOutcome Outcome, long SpaceNe
 /// <param name="http">Sends the download; its own timeout should be infinite, as stalls are caught per read.</param>
 /// <param name="freeSpace">Free bytes on the volume holding a path.</param>
 /// <param name="stallTimeout">How long the download may wait for a byte before it counts as interrupted.</param>
-public sealed class SpritePackArchiveInstaller(HttpClient http, Func<string, long> freeSpace, TimeSpan stallTimeout)
+/// <param name="onUnpacked">Told the path of each file unpacked into place; the archive's checksum covers its bytes.</param>
+public sealed class SpritePackArchiveInstaller(HttpClient http, Func<string, long> freeSpace, TimeSpan stallTimeout,
+    Action<string>? onUnpacked = null)
 {
     /// <summary>Free bytes on the volume holding <paramref name="path"/>.</summary>
     public static long FreeSpace(string path) => new DriveInfo(path).AvailableFreeSpace;
@@ -87,7 +89,7 @@ public sealed class SpritePackArchiveInstaller(HttpClient http, Func<string, lon
                 File.Move(partial, archive, overwrite: true);
             }
 
-            await UnpackAsync(archive, root, source.Name, onProgress, cancellationToken).ConfigureAwait(false);
+            await UnpackAsync(archive, root, source.Name, onProgress, onUnpacked, cancellationToken).ConfigureAwait(false);
             File.Delete(archive);
             await File.WriteAllTextAsync(source.DoneMarker(root), source.Url, cancellationToken).ConfigureAwait(false);
             return new ArchiveResult(ArchiveOutcome.Installed);
@@ -162,7 +164,8 @@ public sealed class SpritePackArchiveInstaller(HttpClient http, Func<string, lon
     }
 
     /// <summary>Writes every entry the device lacks, each through a temporary file and a rename.</summary>
-    private static async Task UnpackAsync(string archive, string root, string name, Action<string, double> onProgress, CancellationToken cancellationToken)
+    private static async Task UnpackAsync(string archive, string root, string name, Action<string, double> onProgress,
+        Action<string>? onUnpacked, CancellationToken cancellationToken)
     {
         using var zip = ZipFile.OpenRead(archive);
         var total = zip.Entries.Count;
@@ -182,6 +185,7 @@ public sealed class SpritePackArchiveInstaller(HttpClient http, Func<string, lon
                     await using (var output = File.Create(temporary))
                         await source.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
                     File.Move(temporary, target, overwrite: true);
+                    onUnpacked?.Invoke(target);
                 }
             }
             if (done % 100 == 0 || done == total)

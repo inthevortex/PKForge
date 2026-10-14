@@ -60,7 +60,8 @@ public sealed class SpritePackDownloader(ISpriteService sprites, IGameDataServic
     private const int Parallelism = 16;
 
     private static readonly SpritePackArchiveInstaller Installer = new(
-        new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, SpritePackArchiveInstaller.FreeSpace, TimeSpan.FromSeconds(30));
+        new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, SpritePackArchiveInstaller.FreeSpace, TimeSpan.FromSeconds(30),
+        ItemArt.NoteUnpacked);
 
     /// <summary>How many pack files this device still lacks; 0 once the pack is complete.</summary>
     public int CountMissing()
@@ -69,12 +70,13 @@ public sealed class SpritePackDownloader(ISpriteService sprites, IGameDataServic
         return SpritePack.Entries([]).Count(e => !File.Exists(Path.Combine(root, e.CachePath))) + WantedItems(root).Count;
     }
 
-    // Many item names have no icon upstream. Once the archive is in, the ones it lacks are
-    // known absent: counting them again would refetch the whole archive or send ~1800
+    // Many item names have no icon upstream. Once the pack is complete (the archive is in, or
+    // a per-file run fetched every icon except those absent upstream), the ones still lacking
+    // are known absent: counting them again would refetch the whole archive or send ~1800
     // requests that can only fail. The UI still asks for them on demand, as before.
     private List<string> WantedItems(string root) => File.Exists(Main.DoneMarker(root))
         ? []
-        : [.. data.ItemNames.Where(n => SpritePack.ItemSlug(n).Length > 0).Distinct().Where(n => !ItemArt.IsCachedOrKnownMissing(n))];
+        : [.. data.ItemNames.Where(n => SpritePack.ItemSlug(n).Length > 0).Distinct().Where(n => !ItemArt.IsCachedOrKnownAbsent(n))];
 
     /// <summary>
     /// Downloads whatever the device lacks, off the UI thread. Cancelling throws
@@ -103,8 +105,15 @@ public sealed class SpritePackDownloader(ISpriteService sprites, IGameDataServic
             }
         }
 
-        await DownloadMissingAsync(root, spriteEntries, WantedItems(root), onProgress, cancellationToken).ConfigureAwait(false);
+        var itemFailures = await DownloadMissingAsync(root, spriteEntries, WantedItems(root), onProgress, cancellationToken).ConfigureAwait(false);
         await FetchAddOnsAsync(root, onProgress, cancellationToken).ConfigureAwait(false);
+
+        // Every sprite in place, file by file or from the archive, counts as the pack once no
+        // item icon failed for a reason other than being absent upstream; until then the
+        // failed icons stay counted as missing and the next run fetches them again.
+        if (ItemIconMisses.PackCanBeMarkedComplete(itemFailures, spriteEntries.All(e => File.Exists(Path.Combine(root, e.CachePath))))
+            && !File.Exists(Main.DoneMarker(root)))
+            await File.WriteAllTextAsync(Main.DoneMarker(root), Main.Url, cancellationToken).ConfigureAwait(false);
 
         var left = CountMissing();
         return left == 0 ? new SpritePackResult(SpritePackStatus.Complete) : new SpritePackResult(SpritePackStatus.Incomplete, left);
@@ -167,8 +176,11 @@ public sealed class SpritePackDownloader(ISpriteService sprites, IGameDataServic
         finally { AddOnGate.Release(); }
     }
 
-    /// <summary>The per-file pass: only what is still missing, a bounded number at a time.</summary>
-    private async Task DownloadMissingAsync(string root, IReadOnlyList<SpritePack.Entry> spriteEntries, IReadOnlyList<string> itemNames,
+    /// <summary>
+    /// The per-file pass: only what is still missing, a bounded number at a time. Returns how
+    /// many item icons failed for a reason other than being absent upstream.
+    /// </summary>
+    private async Task<int> DownloadMissingAsync(string root, IReadOnlyList<SpritePack.Entry> spriteEntries, IReadOnlyList<string> itemNames,
         Action<string, double> onProgress, CancellationToken cancellationToken)
     {
         var units = new List<Func<Task>>();
@@ -177,14 +189,18 @@ public sealed class SpritePackDownloader(ISpriteService sprites, IGameDataServic
             if (!File.Exists(Path.Combine(root, entry.CachePath)))
                 units.Add(() => sprites.DownloadPackFileAsync(entry, cancellationToken));
         }
+        var itemFailures = 0;
         foreach (var name in itemNames)
         {
-            if (!ItemArt.IsCachedOrKnownMissing(name))
-                units.Add(() => ItemArt.GetAsync(name));
+            if (!ItemArt.IsCachedOrKnownAbsent(name))
+                units.Add(async () =>
+                {
+                    if (!await ItemArt.FetchForPackAsync(name).ConfigureAwait(false)) Interlocked.Increment(ref itemFailures);
+                });
         }
 
         var total = units.Count;
-        if (total == 0) return;
+        if (total == 0) return 0;
         var done = 0;
         var gate = new SemaphoreSlim(Parallelism);
         var tasks = units.Select(async unit =>
@@ -204,5 +220,6 @@ public sealed class SpritePackDownloader(ISpriteService sprites, IGameDataServic
             }
         });
         await Task.WhenAll(tasks).ConfigureAwait(false);
+        return itemFailures;
     }
 }

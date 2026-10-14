@@ -421,7 +421,6 @@ public sealed class BankSearchPage : IPadPagingHandler
     {
         var tally = HeldItemSearch.Tally(_all.Select(_facts.HeldItem));
         var holders = tally.Sum(t => t.Count);
-        var directory = Path.Combine(FileSystem.AppDataDirectory, "items");
         var items = new List<PickItem>
         {
             new(0, "All (no item filter)"),
@@ -430,8 +429,7 @@ public sealed class BankSearchPage : IPadPagingHandler
         foreach (var (id, count) in tally)
         {
             var name = HeldItemSearch.NameOf(_data.ItemNames, id);
-            var cached = Path.Combine(directory, ItemArt.Slug(name) + ".png");
-            items.Add(new PickItem(id, name, File.Exists(cached) ? cached : null, $"{count} Pokémon"));
+            items.Add(new PickItem(id, name, ItemArt.CachedPathOrNull(name), $"{count} Pokémon"));
         }
         var current = _filter.HeldItemId ?? (_filter.HoldsItemOnly ? -1 : 0);
         var pick = await PickerMenu.ShowAsync(_host, "Held item", items, current);

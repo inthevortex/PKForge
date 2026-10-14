@@ -69,7 +69,11 @@ public static class MauiProgram
         builder.Services.AddSingleton<IMonInfoService, MonInfoService>();
         builder.Services.AddSingleton<IMonSummaryService, MonSummaryService>();
         builder.Services.AddSingleton<IEvolutionService, EvolutionService>();
-        builder.Services.AddSingleton<ISpriteService, SpriteService>();
+        builder.Services.AddSingleton<ISpriteService>(sp =>
+        {
+            _ = Task.Run(ItemArt.WarmIconCache);
+            return new SpriteService();
+        });
         builder.Services.AddSingleton<PokeparkService>();
         builder.Services.AddSingleton<PokeparkJournalState>();
         builder.Services.AddSingleton<PokeparkSpriteService>();
