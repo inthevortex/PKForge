@@ -35,6 +35,7 @@ public static class MauiProgram
             .UseAvaloniaApp()
             .UseAvaloniaEssentials()
             .UseAvaloniaSkiaSharp()
+            .UseDesktopZoom()
 #endif
             .ConfigureFonts(fonts =>
             {

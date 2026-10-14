@@ -503,7 +503,11 @@ public static class Kit
                 using var tint = new SKPaint { ColorFilter = SKColorFilter.CreateBlendMode(UiTokens.BagCyanEdge.ToSKColor(), SKBlendMode.SrcIn) };
                 var side = Math.Min(args.Info.Width, args.Info.Height);
                 var dest = SKRect.Create((args.Info.Width - side) / 2f, (args.Info.Height - side) / 2f, side, side);
+#if PKFORGE_DESKTOP
+                Platforms.Desktop.DesktopImages.DrawPixelArt(c, image, dest, tint);
+#else
                 c.DrawImage(image, dest, new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None), tint);
+#endif
             };
             face = canvas;
         }

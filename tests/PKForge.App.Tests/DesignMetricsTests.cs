@@ -35,6 +35,30 @@ public sealed class DesignMetricsTests
         Assert.Equal(16, DesignMetrics.Design(32, new DisplaySnapshot(longSidePx, density)));
     }
 
+    [Theory]
+    [InlineData(1.0, 1280 / 1920.0)]
+    [InlineData(1280 / 1920.0, 1.0)]
+    [InlineData(1.0, 1.01)]
+    [InlineData(1.0, 0.99)]
+    [InlineData(0.0, 1.0)]
+    [InlineData(double.NaN, 1.0)]
+    public void AChangeOfAtLeastOnePercentIsSignificant(double built, double now)
+    {
+        Assert.True(DesignMetrics.IsSignificantChange(built, now));
+    }
+
+    [Theory]
+    [InlineData(1.0, 1.0)]
+    [InlineData(1.0, 1.005)]
+    [InlineData(0.5, 0.497)]
+    [InlineData(1.0, 0.0)]
+    [InlineData(1.0, double.NaN)]
+    [InlineData(1.0, double.PositiveInfinity)]
+    public void ASmallerOrUnknownChangeIsNot(double built, double now)
+    {
+        Assert.False(DesignMetrics.IsSignificantChange(built, now));
+    }
+
     [Fact]
     public void CacheShowsTheLastReadingWithoutMeasuring()
     {

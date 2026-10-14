@@ -17,6 +17,7 @@ public static class Program
     {
         AppLog.Install();
         App.Trace("Desktop Program.Main enter");
+        DesktopWindowSizing.Configure(DesktopLaunchOptions.Parse(args));
 
         var builder = BuildAvaloniaApp();
         return builder.StartWithClassicDesktopLifetime(args);
@@ -30,6 +31,7 @@ public static class Program
             .AfterSetup(_ =>
             {
                 Avalonia.Threading.Dispatcher.UIThread.Post(InitializeDesktopInput);
+                Avalonia.Threading.Dispatcher.UIThread.Post(DesktopWindowSizing.AttachWhenReady);
             });
 
     private static void InitializeDesktopInput()

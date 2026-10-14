@@ -5,9 +5,12 @@ using SkiaSharp.Views.Maui.Controls;
 namespace PKForge.App.Services;
 
 /// <summary>
-/// Manages display metrics (density, physical dimensions, and mockup scaling). Values are
-/// measured once and kept until <see cref="Refresh"/> or, on Android, a configuration change,
-/// so every page built in between shares the same sizes.
+/// Manages display and window metrics (density, physical dimensions, and mockup scaling)
+/// across mobile and desktop environments. Values are measured once and kept until
+/// <see cref="Refresh"/> or, on Android, a configuration change, so every page built in
+/// between shares the same sizes. On desktop the density is the window's zoom (see
+/// <c>DesktopZoom</c>): a window longer than the UI size's surface lays out on a surface that
+/// long, and a shorter one at its own size.
 /// </summary>
 public static class ScreenMetrics
 {
@@ -42,7 +45,7 @@ public static class ScreenMetrics
         }
     }
 
-    /// <summary>Physical pixel length of the longer edge of the display.</summary>
+    /// <summary>Physical pixel length of the longer edge of the display or, on desktop, the window.</summary>
     public static double LongSidePx
     {
         get
@@ -62,6 +65,23 @@ public static class ScreenMetrics
 
     /// <summary>Measures again; pages built afterwards follow the new size.</summary>
     internal static DisplaySnapshot Refresh() => Cache.Refresh();
+
+#if PKFORGE_DESKTOP
+    private static Avalonia.Controls.TopLevel? _window;
+
+    /// <summary>
+    /// Measures again from <paramref name="window"/>, which may not be the lifetime's main window
+    /// yet, and keeps measuring from it.
+    /// </summary>
+    internal static DisplaySnapshot Refresh(Avalonia.Controls.TopLevel window)
+    {
+        _window = window;
+        return Cache.Refresh();
+    }
+
+    /// <summary>The units a mockup pixel last measured, without measuring; null before any page could read one.</summary>
+    internal static double? LastDesign => Cache.Last is { } last ? DesignMetrics.Design(1, last) : null;
+#endif
 
     /// <summary>
     /// Computes the exact per-paint pixel-to-dp ratio from an SKCanvasView paint callback,
@@ -95,6 +115,19 @@ public static class ScreenMetrics
     {
         var display = DeviceDisplay.MainDisplayInfo;
         var longSide = Math.Max(display.Width, display.Height);
+#if PKFORGE_DESKTOP
+        var scaling = display.Density > 0 ? display.Density : 1.0;
+        var longSideDip = longSide / scaling;
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess()
+            && (_window ?? (Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow) is { } window
+            && window.ClientSize.Width > 0 && window.ClientSize.Height > 0)
+        {
+            scaling = window.RenderScaling > 0 ? window.RenderScaling : 1.0;
+            longSideDip = Math.Max(window.ClientSize.Width, window.ClientSize.Height);
+        }
+        return Platforms.Desktop.DesktopZoom.Display(longSideDip, scaling, Platforms.Desktop.UiSizeSetting.Current);
+#else
         return new DisplaySnapshot(longSide, display.Density);
+#endif
     }
 }

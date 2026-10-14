@@ -23,6 +23,20 @@ internal static class DesignMetrics
     /// </summary>
     public static double Design(double pixels, DisplaySnapshot display) =>
         !display.IsValid ? pixels / 2 : pixels * (display.LongSidePx / MockupLongSide) / display.Density;
+
+    /// <summary>
+    /// The smallest relative change of a mockup pixel's length that makes pages worth rebuilding:
+    /// below it an editor row moves by under a unit.
+    /// </summary>
+    public const double SignificantChange = 0.01;
+
+    /// <summary>True when pages built with a mockup pixel <paramref name="built"/> units long look wrong at <paramref name="now"/>.</summary>
+    public static bool IsSignificantChange(double built, double now)
+    {
+        if (!(now > 0) || !double.IsFinite(now)) return false;
+        if (!(built > 0) || !double.IsFinite(built)) return true;
+        return Math.Abs(now - built) / built >= SignificantChange;
+    }
 }
 
 /// <summary>

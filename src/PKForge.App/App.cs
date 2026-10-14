@@ -73,14 +73,18 @@ public sealed class App : Application
     }
 
     /// <summary>
-    /// Builds Home and the lower screen again after a color scheme change: pages take their
-    /// colors when they are built. Called from Home's settings, so Home is the only page open.
+    /// Builds Home and the lower screen again: pages take their colors and, on desktop, their
+    /// mockup-sized lengths when they are built. Called after a color scheme or UI size change
+    /// from Home's settings, or on desktop after a resize once Home is idle.
     /// </summary>
     internal async Task ReloadForThemeAsync()
     {
         var services = IPlatformApplication.Current?.Services;
         if (services is null || Windows.Count == 0) return;
         Windows[0].Page = CreateRoot(services);
+#if PKFORGE_DESKTOP
+        Platforms.Desktop.DesktopRelayout.Rebuilt();
+#endif
         var host = services.GetService<PKForge.Domain.ISecondaryDisplayHost>();
         if (host is null || Services.SecondScreenMode.UserOff) return;
         try
@@ -93,6 +97,24 @@ public sealed class App : Application
             Services.AppLog.Warn("theme", $"Rebuilding the lower screen: {error.Message}");
         }
     }
+
+#if PKFORGE_DESKTOP
+    /// <summary>
+    /// True while Home is the only page open, with no menu or dialog over it and nothing in
+    /// progress, so rebuilding it loses nothing the player is looking at and no flow carries
+    /// on against the old page.
+    /// </summary>
+    internal bool IsHomeIdle()
+    {
+        if (Windows.Count == 0 || Windows[0].Page is not NavigationPage root) return false;
+        var navigation = root.Navigation;
+        if (navigation.NavigationStack.Count != 1 || navigation.ModalStack.Count != 0) return false;
+        if (root.CurrentPage is not Views.HomePage home || home.IsFlowRunning) return false;
+        var services = IPlatformApplication.Current?.Services;
+        if (services?.GetService<ViewModels.SavePickerViewModel>()?.IsBusy != false) return false;
+        return services.GetService<Services.GamepadRouter>()?.IsTop(home) == true;
+    }
+#endif
 
     protected override Window CreateWindow(IActivationState? activationState)
     {

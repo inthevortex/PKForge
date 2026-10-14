@@ -20,8 +20,8 @@ internal static class EditorRows
 
     /// <summary>
     /// A length in mockup pixels (the 1920×1080 design) as device-independent units on this
-    /// display: exact on the Thor's 1920×1080 screen, scaled with the screen elsewhere. Read
-    /// it while building a page, never cache it in a static.
+    /// display: exact on the Thor's 1920×1080 screen, scaled with the screen elsewhere and
+    /// with the window on desktop. Read it while building a page, never cache it in a static.
     /// </summary>
     internal static double Design(double pixels) => ScreenMetrics.Design(pixels);
 

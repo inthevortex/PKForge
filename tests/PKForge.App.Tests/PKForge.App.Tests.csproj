@@ -24,6 +24,10 @@
     <Compile Include="../../src/PKForge.App/Platforms/Desktop/DesktopExportPrompt.cs" />
     <Compile Include="../../src/PKForge.App/Platforms/Desktop/SdlSubsystems.cs" />
     <Compile Include="../../src/PKForge.App/Platforms/Desktop/SdlOwnerThread.cs" />
+    <Compile Include="../../src/PKForge.App/Platforms/Desktop/DesktopLaunchOptions.cs" />
+    <Compile Include="../../src/PKForge.App/Platforms/Desktop/DesktopZoom.cs" />
+    <Compile Include="../../src/PKForge.App/Platforms/Desktop/PixelArtScaling.cs" />
+    <Compile Include="../../src/PKForge.App/Platforms/Desktop/PaintFence.cs" />
     <Compile Include="../../src/PKForge.App/Platforms/Desktop/LaunchTargets.cs" />
     <Compile Include="../../src/PKForge.App/Services/ItemIconMisses.cs" />
     <Compile Include="../../src/PKForge.App/Services/ItemIconFile.cs" />
@@ -31,6 +35,7 @@
     <Compile Include="../../src/PKForge.App/Views/ProgressCoalescer.cs" />
     <Compile Include="../../src/PKForge.App/Views/WheelSteps.cs" />
     <Compile Include="../../src/PKForge.App/Services/DesignMetrics.cs" />
+    <Compile Include="../../src/PKForge.App/Services/FlowCounter.cs" />
     <Compile Include="../../src/PKForge.App/Platforms/Android/ScrollRequestTracker.cs" />
   </ItemGroup>
 </Project>
