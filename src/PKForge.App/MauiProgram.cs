@@ -6,7 +6,13 @@ using PKForge.App.Views;
 using PKForge.Domain;
 using PKForge.Engine;
 using PKForge.Infrastructure;
+#if ANDROID
 using SkiaSharp.Views.Maui.Controls.Hosting;
+#elif PKFORGE_DESKTOP
+using Avalonia.Controls.Maui;
+using PKForge.App.Platforms.Desktop;
+using SkiaSharp.Views.Maui.Controls.Hosting;
+#endif
 
 namespace PKForge.App;
 
@@ -18,11 +24,18 @@ public static class MauiProgram
         Services.AppLog.Install();
         var builder = MauiApp.CreateBuilder();
         App.Trace("CreateMauiApp enter");
-#if ANDROID
         Views.CapsuleSkin.Register();
+#if ANDROID
         Platforms.Android.AndroidScrollTo.Register();
 #endif
-        builder.UseMauiApp<App>().UseSkiaSharp()
+        builder.UseMauiApp<App>()
+#if ANDROID
+            .UseSkiaSharp()
+#elif PKFORGE_DESKTOP
+            .UseAvaloniaApp()
+            .UseAvaloniaEssentials()
+            .UseAvaloniaSkiaSharp()
+#endif
             .ConfigureFonts(fonts =>
             {
                 fonts.AddFont("MPLUSRounded1c-Regular.ttf", "Rounded");
@@ -104,6 +117,28 @@ public static class MauiProgram
         builder.Services.AddSingleton<IFolderFileAccess, AndroidFolderFileAccess>();
         builder.Services.AddSingleton<IEmulatorDetectionService, AndroidEmulatorScanner>();
         builder.Services.AddSingleton<IUpdateInstaller, Platforms.Android.AndroidUpdateInstaller>();
+#elif PKFORGE_DESKTOP
+        builder.Services.AddSingleton<ISecondaryDisplayHost, Platforms.Desktop.NullSecondaryDisplayHost>();
+
+        var desktopDisplay = new Platforms.Desktop.DesktopDeviceDisplay();
+        builder.Services.AddSingleton<Microsoft.Maui.Devices.IDeviceDisplay>(desktopDisplay);
+        typeof(Microsoft.Maui.Devices.DeviceDisplay).GetMethod("SetCurrent", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.Invoke(null, [desktopDisplay]);
+
+        var desktopAppInfo = new Platforms.Desktop.DesktopAppInfo();
+        builder.Services.AddSingleton<Microsoft.Maui.ApplicationModel.IAppInfo>(desktopAppInfo);
+        typeof(Microsoft.Maui.ApplicationModel.AppInfo).GetMethod("SetCurrent", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.Invoke(null, [desktopAppInfo]);
+
+        var desktopLauncher = new Platforms.Desktop.DesktopLauncher();
+        builder.Services.AddSingleton<Microsoft.Maui.ApplicationModel.ILauncher>(desktopLauncher);
+        typeof(Microsoft.Maui.ApplicationModel.Launcher).GetMethod("SetDefault", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.Invoke(null, [desktopLauncher]);
+
+        var desktopClipboard = new Platforms.Desktop.DesktopClipboard();
+        builder.Services.AddSingleton<Microsoft.Maui.ApplicationModel.DataTransfer.IClipboard>(desktopClipboard);
+        typeof(Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard).GetMethod("SetDefault", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.Invoke(null, [desktopClipboard]);
+
+        var desktopConnectivity = new Platforms.Desktop.DesktopConnectivity();
+        builder.Services.AddSingleton<Microsoft.Maui.Networking.IConnectivity>(desktopConnectivity);
+        typeof(Microsoft.Maui.Networking.Connectivity).GetMethod("SetCurrent", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)?.Invoke(null, [desktopConnectivity]);
 #endif
         builder.Services.AddSingleton<IWatchedRootStore, PreferencesWatchedRootStore>();
         builder.Services.AddSingleton<BoxBrowserViewModel>();

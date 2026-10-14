@@ -144,6 +144,7 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// </summary>
     private static void BlockNativeFocus(View view)
     {
+#if ANDROID
         view.HandlerChanged += (_, _) =>
         {
             if (view.Handler?.PlatformView is Android.Views.View platform)
@@ -152,6 +153,7 @@ public sealed class HomePage : ContentPage, IPadHandler
                 platform.FocusableInTouchMode = false;
             }
         };
+#endif
     }
 
     /// <summary>
@@ -163,6 +165,7 @@ public sealed class HomePage : ContentPage, IPadHandler
     /// </summary>
     private static void AttachPress(View view, Action onTap, Action onLongPress)
     {
+#if ANDROID
         view.HandlerChanged += (_, _) =>
         {
             if (view.Handler?.PlatformView is not Android.Views.View platform) return;
@@ -206,6 +209,79 @@ public sealed class HomePage : ContentPage, IPadHandler
                 e.Handled = true;
             };
         };
+#elif PKFORGE_DESKTOP
+        void HookDesktop(Avalonia.Controls.Control platform)
+        {
+            var token = 0;
+            var pressing = false;
+            Avalonia.Point downPos = default;
+            const double slop = 10;
+            const int timeout = 500;
+
+            platform.PointerPressed += (_, e) =>
+            {
+                var pt = e.GetCurrentPoint(platform);
+                if (pt.Properties.IsRightButtonPressed)
+                {
+                    e.Handled = true;
+                    onLongPress();
+                    return;
+                }
+                if (pt.Properties.IsLeftButtonPressed)
+                {
+                    var pressed = ++token;
+                    pressing = true;
+                    downPos = e.GetPosition(platform);
+                    view.Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(timeout), () =>
+                    {
+                        if (pressed != token || !pressing) return;
+                        pressing = false;
+                        onLongPress();
+                    });
+                    e.Handled = true;
+                }
+            };
+
+            platform.PointerMoved += (_, e) =>
+            {
+                if (!pressing) return;
+                var pos = e.GetPosition(platform);
+                if (Math.Abs(pos.X - downPos.X) > slop || Math.Abs(pos.Y - downPos.Y) > slop)
+                {
+                    pressing = false;
+                    token++;
+                }
+            };
+
+            platform.PointerReleased += (_, e) =>
+            {
+                var wasPressing = pressing;
+                pressing = false;
+                token++;
+                if (wasPressing)
+                {
+                    e.Handled = true;
+                    onTap();
+                }
+            };
+
+            platform.PointerCaptureLost += (_, _) =>
+            {
+                pressing = false;
+                token++;
+            };
+        }
+
+        if (view.Handler?.PlatformView is Avalonia.Controls.Control direct) HookDesktop(direct);
+        view.HandlerChanged += (_, _) =>
+        {
+            if (view.Handler?.PlatformView is Avalonia.Controls.Control platform) HookDesktop(platform);
+        };
+#else
+        var tap = new TapGestureRecognizer();
+        tap.Tapped += (_, _) => onTap();
+        view.GestureRecognizers.Add(tap);
+#endif
     }
 
     // Once per launch, not per page: a color scheme change rebuilds Home, and the new page
@@ -833,11 +909,10 @@ public sealed class HomePage : ContentPage, IPadHandler
         {
             var order = music.Order == Domain.MusicOrder.Shuffle ? "Shuffle" : "In order";
             var auto = music.Autostart ? "ON" : "OFF";
-            var androidMusic = music as Platforms.Android.MusicPlayer;
             var playing = music.IsPlaying
                 ? $"Playing: {music.Library[music.CurrentIndex ?? 0].Title}"
                 : $"Library: {music.Library.Count} track(s)";
-            if (androidMusic?.LastError is { } err)
+            if (music.LastError is { } err)
                 playing += $"\nLast error: {err}";
             var choice = await PadMenu.ShowAsync(_hostGrid, "Background music", playing,
                 new PadOption(music.IsPlaying ? "Pause" : "Play", IconPath: music.IsPlaying ? "pause" : "play"),

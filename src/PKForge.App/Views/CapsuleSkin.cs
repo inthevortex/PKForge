@@ -239,5 +239,7 @@ public static class CapsuleSkin
         var drop = (int)Math.Round(Dp(native, Drop + (state.Focused ? 1 : 0)));
         native.SetPadding((int)Dp(native, p.Left), (int)Dp(native, p.Top), (int)Dp(native, p.Right), (int)Dp(native, p.Bottom) + drop);
     }
+#else
+    public static void Register() { }
 #endif
 }

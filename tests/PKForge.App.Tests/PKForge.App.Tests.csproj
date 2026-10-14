@@ -15,6 +15,8 @@
   <ItemGroup>
     <Compile Include="../../src/PKForge.App/Services/PadInputPump.cs" />
     <Compile Include="../../src/PKForge.App/Services/GamepadRouting.cs" />
+    <Compile Include="../../src/PKForge.App/Platforms/Desktop/AppVersionInfo.cs" />
+    <Compile Include="../../src/PKForge.App/Platforms/Desktop/LaunchTargets.cs" />
     <Compile Include="../../src/PKForge.App/Services/ItemIconMisses.cs" />
     <Compile Include="../../src/PKForge.App/Services/ItemIconFile.cs" />
     <Compile Include="../../src/PKForge.App/Services/ItemPlaceholder.cs" />
