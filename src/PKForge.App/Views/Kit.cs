@@ -513,10 +513,13 @@ public static class Kit
             VerticalTextAlignment = TextAlignment.Center, HorizontalTextAlignment = TextAlignment.Center,
         };
         var drawn = face is SKCanvasView;
+        // The border clips its content to the stroke shape, and the shoulder keys' art reaches
+        // the corners and bottom edge that a disc would cut away.
+        Shape shape = drawn ? new Microsoft.Maui.Controls.Shapes.Rectangle() : new RoundRectangle { CornerRadius = 11 };
         var key = new Border
         {
             StrokeThickness = 0,
-            StrokeShape = new RoundRectangle { CornerRadius = 11 },
+            StrokeShape = shape,
             BackgroundColor = drawn ? Colors.Transparent : UiTokens.BagCyanEdge,
             Padding = new Thickness(!drawn && glyph.Length > 1 ? 7 : 0, 0),
             MinimumWidthRequest = 22,
