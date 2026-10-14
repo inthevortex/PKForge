@@ -288,16 +288,14 @@ public static class EventGallery
     }
 
     /// <summary>Scales a canvas to dp and returns the dp size.</summary>
-    private static SKSize BeginDp(SKCanvas canvas, SKImageInfo info)
+    private static SKSize BeginDp(SKCanvas canvas, SKImageInfo info, float density = 0f)
     {
         canvas.Clear(SKColors.Transparent);
-        var density = (float)DeviceDisplay.MainDisplayInfo.Density;
+        if (density <= 0) density = (float)ScreenMetrics.Density;
         if (density <= 0) density = 1;
         canvas.Scale(density);
         return new SKSize(info.Width / density, info.Height / density);
     }
-
-    private static float Density => Math.Max(1f, (float)DeviceDisplay.MainDisplayInfo.Density);
 
     /// <summary>CJK-capable face for original card titles (the pixel face has no kana).</summary>
     private static SKTypeface CjkFace => _cjk ??= SKFontManager.Default.MatchCharacter('あ') ?? SKTypeface.Default;
@@ -466,7 +464,7 @@ public static class EventGallery
             _list.Touch += OnListTouch;
             // Drag, flick with momentum, and a thumb you can grab: the album is long.
             _scroller = new TouchScroller(_list.Dispatcher, () => _scroll, offset => { _scroll = offset; _list.InvalidateSurface(); },
-                () => Math.Max(0, _contentH - _viewH), () => _viewH, () => _track, slop: 8, grabWidth: 28);
+                () => Math.Max(0, _contentH - _viewH), () => _viewH, () => _track, slop: () => 8, grabWidth: () => 28);
 
             _preview = new SKCanvasView { EnableTouchEvents = true };
             _preview.PaintSurface += PaintPreview;
@@ -629,7 +627,7 @@ public static class EventGallery
         private void PaintHeader(object? sender, SKPaintSurfaceEventArgs args)
         {
             var c = args.Surface.Canvas;
-            var size = BeginDp(c, args.Info);
+            var size = BeginDp(c, args.Info, ScreenMetrics.CanvasDensity(sender, args.Info));
             var strip = new SKRect(0, 1, size.Width - 3, size.Height - 2);
             using var title = Font(15.5f);
             PksmPaint.HeaderStrip(c, strip, "Mystery Gift", title, Pksm.GiftPinkLight);
@@ -664,7 +662,7 @@ public static class EventGallery
         private void PaintChips(object? sender, SKPaintSurfaceEventArgs args)
         {
             var c = args.Surface.Canvas;
-            var size = BeginDp(c, args.Info);
+            var size = BeginDp(c, args.Info, ScreenMetrics.CanvasDensity(sender, args.Info));
             _chipHits.Clear();
             using var font = Font(12.5f);
             var chips = Chips().ToArray();
@@ -690,7 +688,8 @@ public static class EventGallery
         {
             args.Handled = true;
             if (args.ActionType != SKTouchAction.Released) return;
-            var p = new SKPoint(args.Location.X / Density, args.Location.Y / Density);
+            var density = ScreenMetrics.PaintedDensity(sender);
+            var p = new SKPoint(args.Location.X / density, args.Location.Y / density);
             foreach (var (rect, tap) in _chipHits)
                 if (SKRect.Inflate(rect, 2, 4).Contains(p)) { tap(); return; }
         }
@@ -729,7 +728,7 @@ public static class EventGallery
         private void PaintList(object? sender, SKPaintSurfaceEventArgs args)
         {
             var c = args.Surface.Canvas;
-            var size = BeginDp(c, args.Info);
+            var size = BeginDp(c, args.Info, ScreenMetrics.CanvasDensity(sender, args.Info));
             if (Math.Abs(_viewH - size.Height) > 0.5f)
             {
                 _viewH = size.Height;
@@ -829,10 +828,11 @@ public static class EventGallery
         private void OnListTouch(object? sender, SKTouchEventArgs args)
         {
             args.Handled = true;
-            var point = new SKPoint(args.Location.X / Density, args.Location.Y / Density);
+            var density = ScreenMetrics.PaintedDensity(sender);
+            var point = new SKPoint(args.Location.X / density, args.Location.Y / density);
             if (args.ActionType == SKTouchAction.WheelChanged)
             {
-                _scroll -= args.WheelDelta / Density;
+                _scroll -= args.WheelDelta / density;
                 ClampScroll();
                 _list.InvalidateSurface();
                 return;
@@ -879,7 +879,7 @@ public static class EventGallery
         private void PaintPreview(object? sender, SKPaintSurfaceEventArgs args)
         {
             var c = args.Surface.Canvas;
-            var size = BeginDp(c, args.Info);
+            var size = BeginDp(c, args.Info, ScreenMetrics.CanvasDensity(sender, args.Info));
             var card = new SKRect(0, 0, size.Width - 4, size.Height - 4);
             DrawCardBody(c, card, 20);
             using var bandFont = Font(11.5f);
@@ -1306,7 +1306,7 @@ public static class EventGallery
         private void PaintCard(object? sender, SKPaintSurfaceEventArgs args)
         {
             var c = args.Surface.Canvas;
-            var size = BeginDp(c, args.Info);
+            var size = BeginDp(c, args.Info, ScreenMetrics.CanvasDensity(sender, args.Info));
             var e = Shown;
             var card = new SKRect(0, 0, size.Width - 4, size.Height - 4);
             DrawCardBody(c, card, 24);
@@ -1377,7 +1377,7 @@ public static class EventGallery
         private void PaintFacts(object? sender, SKPaintSurfaceEventArgs args)
         {
             var c = args.Surface.Canvas;
-            var size = BeginDp(c, args.Info);
+            var size = BeginDp(c, args.Info, ScreenMetrics.CanvasDensity(sender, args.Info));
             var panel = new SKRect(0, 0, size.Width - 4, size.Height - 4);
             PksmPaint.Panel(c, panel, Pksm.PaperShade);
             using var head = Font(12.5f);

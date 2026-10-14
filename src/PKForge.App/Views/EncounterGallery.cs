@@ -10,11 +10,6 @@ using SkiaSharp.Views.Maui.Controls;
 
 namespace PKForge.App.Views;
 
-file static class DpScale
-{
-    public static float Value => (float)DeviceDisplay.MainDisplayInfo.Density;
-}
-
 /// <summary>
 /// "How do I get this?" - the whole answer, no save required.
 ///
@@ -356,7 +351,7 @@ public static class EncounterGallery
             var canvas = args.Surface.Canvas;
             canvas.Clear(SKColors.Transparent);
             // Laid out in dp (row heights, card widths): scale the pixel canvas to match.
-            var density = (float)DeviceDisplay.MainDisplayInfo.Density;
+            var density = ScreenMetrics.CanvasDensity(sender, args.Info);
             canvas.Scale(density);
             var info = new SKImageInfo((int)(args.Info.Width / density), (int)(args.Info.Height / density));
             _rowsPerScreen = Math.Max(2, (int)((info.Height - 8 + Gap) / (RowH + Gap)));
@@ -424,11 +419,12 @@ public static class EncounterGallery
             if (args.ActionType != SKTouchAction.Released) return;
             args.Handled = true;
             var rows = BuildRows();
+            var touchY = args.Location.Y / ScreenMetrics.PaintedDensity(sender);
             var y = 4f;
             foreach (var row in rows)
             {
                 var height = row.IsHeader ? HeaderH : RowH;
-                if (!row.IsHeader && args.Location.Y / DpScale.Value >= y && args.Location.Y / DpScale.Value <= y + height)
+                if (!row.IsHeader && touchY >= y && touchY <= y + height)
                 {
                     _index = row.Display;
                     _wall.InvalidateSurface();
@@ -664,7 +660,7 @@ public static class EncounterGallery
             var canvas = args.Surface.Canvas;
             canvas.Clear(SKColors.Transparent);
             // Laid out in dp (row heights, card widths): scale the pixel canvas to match.
-            var density = (float)DeviceDisplay.MainDisplayInfo.Density;
+            var density = ScreenMetrics.CanvasDensity(sender, args.Info);
             canvas.Scale(density);
             var info = new SKImageInfo((int)(args.Info.Width / density), (int)(args.Info.Height / density));
 
@@ -739,7 +735,8 @@ public static class EncounterGallery
             if (args.ActionType != SKTouchAction.Released) return;
             args.Handled = true;
 
-            var index = HitTest(args.Location.X / DpScale.Value, args.Location.Y / DpScale.Value);
+            var density = ScreenMetrics.PaintedDensity(sender);
+            var index = HitTest(args.Location.X / density, args.Location.Y / density);
             if (index < 0) return;
             _index = index;
             EnsureVisible();

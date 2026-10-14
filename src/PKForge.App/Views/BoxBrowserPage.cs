@@ -460,7 +460,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
 
     // The box and the editor panel split the width as the mockup does: 1072 to 740.
     private static readonly GridLength PanelWidth = new(740, GridUnitType.Star);
-    private static readonly double PanelSpacing = Design(32);
+    private static double PanelSpacing => Design(32);
 
     private View BuildSidePanel()
     {
@@ -3478,7 +3478,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
                 HorizontalOptions = LayoutOptions.Center,
             };
             var canvas = new SKCanvasView { InputTransparent = true };
-            canvas.PaintSurface += (_, args) =>
+            canvas.PaintSurface += (s, args) =>
             {
                 var c = args.Surface.Canvas;
                 c.Clear(SKColors.Transparent);
@@ -3489,7 +3489,8 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
                 var r = new SKRect(cx - radius, cy - radius, cx + radius, cy + radius);
                 using var fill = new SKPaint { Color = Pksm.BagNavy, IsAntialias = true };
                 using var inner = new SKPaint { Color = Pksm.BagNavyDeep, IsAntialias = true };
-                using var rim = new SKPaint { Color = Pksm.LogoGrid, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f * (float)DeviceDisplay.MainDisplayInfo.Density };
+                var density = ScreenMetrics.CanvasDensity(s, info);
+                using var rim = new SKPaint { Color = Pksm.LogoGrid, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f * density };
                 using var arm = new SKPaint { Color = Pksm.Ink, IsAntialias = true };
                 c.DrawOval(r, fill);
                 c.DrawOval(SKRect.Inflate(r, -1.5f, -1.5f), inner);

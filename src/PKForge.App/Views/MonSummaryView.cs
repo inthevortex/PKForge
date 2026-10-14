@@ -196,7 +196,7 @@ public sealed class MonSummaryView : ContentView
     private SKSize BeginDesign(SKCanvas canvas, SKImageInfo info, View view)
     {
         canvas.Clear(SKColors.Transparent);
-        var pxPerDp = view.Width > 0 ? (float)(info.Width / view.Width) : (float)Math.Max(1, DeviceDisplay.MainDisplayInfo.Density);
+        var pxPerDp = ScreenMetrics.CanvasDensity(view, info);
         var scale = pxPerDp * _unit;
         canvas.Scale(scale);
         return new SKSize(info.Width / scale, info.Height / scale);
@@ -231,8 +231,7 @@ public sealed class MonSummaryView : ContentView
     private void OnPageTouch(object? sender, SKTouchEventArgs args)
     {
         args.Handled = true;
-        var widthPx = _page.CanvasSize.Width;
-        var density = widthPx > 0 && _page.Width > 0 ? (float)(widthPx / _page.Width) : 1f;
+        var density = ScreenMetrics.PaintedDensity(_page);
         var point = new SKPoint(args.Location.X / density, args.Location.Y / density);
         var now = Environment.TickCount64;
         switch (args.ActionType)
