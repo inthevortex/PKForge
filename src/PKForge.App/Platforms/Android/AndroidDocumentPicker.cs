@@ -116,9 +116,18 @@ public sealed class AndroidDocumentPicker : Java.Lang.Object, IDocumentPicker
     {
         var displayNameColumn = global::Android.Provider.IOpenableColumns.DisplayName;
         using var cursor = Platform.AppContext.ContentResolver?.Query(uri, [displayNameColumn], null, null, null);
-        if (cursor is null || !cursor.MoveToFirst())
-            return null;
-        var index = cursor.GetColumnIndex(displayNameColumn);
-        return index >= 0 ? cursor.GetString(index) : null;
+        if (cursor is null) return null;
+
+        // Disposing only releases the managed peer; the Java cursor stays open until Close.
+        try
+        {
+            if (!cursor.MoveToFirst()) return null;
+            var index = cursor.GetColumnIndex(displayNameColumn);
+            return index >= 0 ? cursor.GetString(index) : null;
+        }
+        finally
+        {
+            cursor.Close();
+        }
     }
 }
