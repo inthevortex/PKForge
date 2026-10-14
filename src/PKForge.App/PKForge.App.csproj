@@ -13,7 +13,11 @@
     <ApplicationVersion>310</ApplicationVersion>
     <ApplicationDisplayVersion>3.1.0</ApplicationDisplayVersion>
     <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
+    <PKForgeUpdateRepository Condition="'$(PKForgeUpdateRepository)' == ''">sofianeelhor/PKForge</PKForgeUpdateRepository>
   </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="PKForgeUpdateRepository" Value="$(PKForgeUpdateRepository)" />
+  </ItemGroup>
   <PropertyGroup Condition="'$(DiagnosticBuild)' == 'true'">
     <!-- Diagnostic builds install beside production and cannot overwrite its app-private data. -->
     <ApplicationId>org.pkforge.app.debug</ApplicationId>

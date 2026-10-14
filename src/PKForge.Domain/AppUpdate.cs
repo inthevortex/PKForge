@@ -20,6 +20,9 @@ public enum AppUpdateInstallResult
     ReleasePageOpened,
 }
 
+/// <summary>The latest release has no package for this platform: an expected answer, not a fault.</summary>
+public sealed class ReleaseAssetMissingException(string message) : Exception(message);
+
 /// <summary>Pure release-channel rules. Network and platform services stay in the app layer.</summary>
 public static class AppUpdateRules
 {
@@ -39,6 +42,40 @@ public static class AppUpdateRules
     /// <summary>Don't-remind-me applies to one release. A newer release always asks again.</summary>
     public static bool ShouldPromptAutomatically(string installed, string candidate, string skipped) =>
         IsNewerVersion(installed, candidate) && !string.Equals(candidate, skipped, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Parses a GitHub release JSON response and extracts the matching release update information.</summary>
+    public static AppUpdateCheck ParseRelease(
+        string json,
+        string installedVersion,
+        Func<string, bool> assetPredicate,
+        string? missingAssetError = null)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        var version = root.TryGetProperty("tag_name", out var tag) ? tag.GetString() : null;
+        var releaseUrl = root.TryGetProperty("html_url", out var html) ? html.GetString() : null;
+        if (string.IsNullOrWhiteSpace(version) || string.IsNullOrWhiteSpace(releaseUrl))
+            throw new InvalidDataException("The latest release did not include a version.");
+
+        var asset = root.TryGetProperty("assets", out var assets)
+            ? assets.EnumerateArray()
+                .FirstOrDefault(a => a.TryGetProperty("name", out var name) && assetPredicate(name.GetString() ?? ""))
+            : default;
+        if (asset.ValueKind == System.Text.Json.JsonValueKind.Undefined)
+            throw new ReleaseAssetMissingException(missingAssetError ?? "The latest release did not include a matching package.");
+
+        var downloadUrl = asset.GetProperty("browser_download_url").GetString();
+        if (string.IsNullOrWhiteSpace(downloadUrl))
+            throw new InvalidDataException("The release package had no download URL.");
+        var size = asset.TryGetProperty("size", out var sizeElement) && sizeElement.TryGetInt64(out var bytes) ? bytes : 0;
+        var update = new AvailableAppUpdate(version, releaseUrl, downloadUrl, size);
+        return new AppUpdateCheck(
+            IsNewerVersion(installedVersion, update.Version),
+            update,
+            IsNewerVersion(installedVersion, update.Version)
+                ? $"Version {update.Version} is available."
+                : $"PKForge {installedVersion} is up to date.");
+    }
 
     private static bool TryParse(string value, out ReleaseVersion version)
     {

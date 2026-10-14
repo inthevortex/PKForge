@@ -285,6 +285,7 @@ public sealed class HomePage : ContentPage, IPadHandler
         if (_viewModel.ShowWizard && !_welcomeShown)
         {
             _welcomeShown = true;
+            _updateCheckQueued = true;
             Dispatcher.Dispatch(async () =>
             {
                 // First run plays like a Pokémon intro: a professor-style dialogue, then the choices.
@@ -713,7 +714,10 @@ public sealed class HomePage : ContentPage, IPadHandler
         }
         catch (Exception error)
         {
-            Android.Util.Log.Warn("PKForgeUpdate", $"Automatic update check failed: {error}");
+            // A release without this platform's package is expected, so it needs no stack trace.
+            AppLog.Warn("update", error is ReleaseAssetMissingException
+                ? $"Update check: {error.Message}"
+                : $"Update check failed: {error}");
             if (!automatic)
                 _viewModel.Status = $"Update check failed: {error.Message}";
             return;
@@ -769,7 +773,7 @@ public sealed class HomePage : ContentPage, IPadHandler
         }
         catch (Exception error)
         {
-            Android.Util.Log.Error("PKForgeUpdate", $"Download/install failed: {error}");
+            AppLog.Error("update", $"Download/install failed: {error}");
             _viewModel.Status = $"Update failed: {error.Message}";
             var openRelease = await PadMenu.ConfirmAsync(_hostGrid, "Open the release page?",
                 "The in-app installer could not finish. The GitHub release page has the same APK.", "Open");
