@@ -165,6 +165,11 @@ Download the APK from [Releases](https://github.com/sofianeelhor/PKForge/release
 allow installs from unknown sources. First run walks you through linking an emulator or
 opening a single save file.
 
+On Linux (x86-64, X11 or XWayland), install the `.deb`, `.rpm` or `.pkg.tar.zst` package for
+your distribution; it pulls in the system libraries PKForge loads (fontconfig, ICU, OpenSSL,
+X11 and GL/EGL). The `-linux-x64.tar.gz` archive installs into your home folder with its
+`install.sh`, and expects those libraries to be present already.
+
 New to PKForge? Start with [Getting Started](https://github.com/sofianeelhor/PKForge/wiki/Getting-Started).
 If PKForge finds no saves, the folder picked is usually the wrong one: see
 [Choosing the right folder](https://github.com/sofianeelhor/PKForge/wiki/Choosing-the-Right-Folder).
@@ -179,16 +184,29 @@ Join for updates, support, bug reports, feature requests, or just to chat about 
 
 ## Building
 
-.NET 10 SDK with the `maui-android` workload, Android SDK (API 36).
+.NET 11 SDK with the `maui-android` workload, Android SDK (API 37). `global.json` pins the exact SDK and workload set.
 
 ```bash
 git submodule update --init --recursive
 dotnet test tests/PKForge.Domain.Tests/PKForge.Domain.Tests.csproj
 dotnet test tests/PKForge.Engine.Tests/PKForge.Engine.Tests.csproj
-dotnet build src/PKForge.App/PKForge.App.csproj -f net10.0-android
+dotnet test tests/PKForge.App.Tests/PKForge.App.Tests.csproj
+dotnet build src/PKForge.App/PKForge.App.csproj -f net11.0-android
 ```
 
-Version tags build and publish the APK from CI.
+### Linux desktop
+
+The same app runs on the Linux desktop through
+[Avalonia.Controls.Maui](https://github.com/AvaloniaUI/Avalonia.Controls.Maui) (X11 or
+XWayland; the workload is still needed for restore). `tools/Packaging/package.sh` builds the
+tarball and the `.deb`, `.rpm` and `.pkg.tar.zst` packages into `artifacts/`.
+
+```bash
+dotnet run --project src/PKForge.App/PKForge.App.csproj -f net11.0 -- --windowed
+```
+
+Version tags build and publish the APK and the Linux packages from CI. The tag must match
+`ApplicationDisplayVersion`; a pre-release tag such as `v3.2.0-beta1` is published as a pre-release.
 
 ### Layout
 
@@ -197,9 +215,10 @@ src/PKForge.Domain          contracts and DTOs, no engine or Android dependencie
 src/PKForge.Engine          adapters over pinned PKHeX.Core
 src/PKForge.AutoMod         compiles the Auto Legality Mod against our Core
 src/PKForge.Infrastructure  bank, backups, atomic save writer
-src/PKForge.App             MAUI app, SkiaSharp UI, gamepad and second screen
+src/PKForge.App             MAUI app (Android and Linux desktop), SkiaSharp UI, gamepad and second screen
 src/PKForge.Chrome          the design system: tokens and painters, pure Skia
 tools/ChromePreview         renders the design system off-device
+tools/Packaging             Linux tarball, .deb, .rpm and pacman packages
 docs/                       architecture, bank model, development, art direction
 ```
 

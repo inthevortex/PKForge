@@ -35,6 +35,7 @@ Lower layers never reference MAUI or Android. ViewModels never expose PKHeX type
 - `src/PKForge.App`: MAUI application, ViewModels, pages, SkiaSharp surfaces, DI composition root.
 - `src/PKForge.Android`: Android platform services: SAF URI streams and persistable grants, emulator scanner, gamepad event/focus bridge, secondary-display Presentation host.
 - `tests/PKForge.Domain.Tests`: deterministic headless behavior tests; save corpus tests live beside engine tests and are excluded from UI concerns.
+- `tests/PKForge.App.Tests`: tests for the framework-free helpers in `src/PKForge.App` (input routing, desktop zoom and launch options, caches, layout metrics), compiled in by file link so no MAUI or Avalonia reference is needed.
 
 A solution-level Android app may reference Domain, Engine, Infrastructure, and platform services through interfaces. Domain does not reference any concrete project.
 
