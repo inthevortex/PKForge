@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=PKForge
+Comment=Pokémon save file editor
+Exec=pkforge
+Icon=pkforge
+Terminal=false
+Type=Application
+Categories=Game;
+Keywords=pokemon;pkhex;save;editor;
+StartupWMClass=PKForge
