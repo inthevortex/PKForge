@@ -21,12 +21,21 @@ public sealed class ThreeDsSaveLayoutTests : IDisposable
         Directory.EnumerateFileSystemEntries(dir).Select(path =>
             new TreeEntry<string>(Path.GetFileName(path), Directory.Exists(path), path));
 
-    /// <summary>Creates &lt;base&gt;/&lt;prefix&gt;/Nintendo 3DS/... with a main save and returns the grant root.</summary>
+    /// <summary>Creates <base>/<prefix>/Nintendo 3DS/... with a main save and returns the grant root.</summary>
     private string Build(string prefix, string title = SunTitle)
     {
         var slot = Path.Combine(_temp, prefix, "Nintendo 3DS", Id0, Id1, "title", "00040000", title, "data", "00000001");
         Directory.CreateDirectory(slot);
         File.WriteAllBytes(Path.Combine(slot, "main"), [1, 2, 3]);
+        File.WriteAllBytes(Path.Combine(slot, "..", "00000001.metadata"), [0]);
+        return _temp;
+    }
+
+    private string BuildVirtualConsole(string prefix, string title = "00171000")
+    {
+        var slot = Path.Combine(_temp, prefix, "Nintendo 3DS", Id0, Id1, "title", "00040000", title, "data", "00000001");
+        Directory.CreateDirectory(slot);
+        File.WriteAllBytes(Path.Combine(slot, "sav.dat"), [1, 2, 3]);
         File.WriteAllBytes(Path.Combine(slot, "..", "00000001.metadata"), [0]);
         return _temp;
     }
@@ -93,6 +102,15 @@ public sealed class ThreeDsSaveLayoutTests : IDisposable
         var hit = Assert.Single(hits);
         Assert.Equal(SunTitle, hit.TitleId);
         Assert.Equal("main", Path.GetFileName(hit.File));
+    }
+
+    [Fact]
+    public void FindsVirtualConsoleSavDatSaves()
+    {
+        BuildVirtualConsole("user/sdmc", "00171000");
+        var hit = Assert.Single(Find(Path.Combine(_temp, "user")));
+        Assert.Equal("sav.dat", Path.GetFileName(hit.File));
+        Assert.Equal("00171000", hit.TitleId);
     }
 
     [Fact]

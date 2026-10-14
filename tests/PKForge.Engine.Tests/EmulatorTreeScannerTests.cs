@@ -80,6 +80,24 @@ public sealed class EmulatorTreeScannerTests : IDisposable
     private static byte[] BlackSave() =>
         BlankSaveFile.Get(GameVersion.B, "PKForge", LanguageID.English).Write().ToArray();
 
+    private static byte[] Gen7Save()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PKForge.sln")))
+            directory = directory.Parent;
+        if (directory is null) throw new InvalidOperationException("PKForge.sln not found");
+        var path = Path.Combine(directory.FullName, "external", "PKHeX", "Tests", "PKHeX.Core.Tests", "TestData", "SM Project 802.main");
+        return File.ReadAllBytes(path);
+    }
+
+    private static byte[] CrystalSave()
+    {
+        var sram = new byte[0x8000];
+        int[] lists = [0x2865, 0x2D10];
+        foreach (var list in lists) { sram[list] = 0; sram[list + 1] = 0xFF; }
+        return new SAV2(sram, LanguageID.English, GameVersion.C).Write().ToArray();
+    }
+
     private static byte[] BdspSave(GameVersion version = GameVersion.BD) =>
         new SAV8BS { Version = version }.Write().ToArray();
 
@@ -180,6 +198,35 @@ public sealed class EmulatorTreeScannerTests : IDisposable
 
         Assert.Contains(result.RejectedCandidates, r =>
             r.Contains("MemoryCardA.USA.raw") && r.Contains("export Colosseum/XD as GCI"));
+    }
+
+    [Fact]
+    public void ThreeDsScansBothMainAndVirtualConsoleSavDat()
+    {
+        const string id0 = "0123456789abcdef0123456789abcdef";
+        const string id1 = "fedcba9876543210fedcba9876543210";
+        var root = Path.Combine(_temp, "azahar");
+
+        var sunSlot = Path.Combine(root, "Nintendo 3DS", id0, id1, "title", "00040000", "00164800", "data", "00000001");
+        Directory.CreateDirectory(sunSlot);
+        File.WriteAllBytes(Path.Combine(sunSlot, "main"), Gen7Save());
+
+        var vcCrystalSlot = Path.Combine(root, "Nintendo 3DS", id0, id1, "title", "00040000", "00175E00", "data", "00000001");
+        Directory.CreateDirectory(vcCrystalSlot);
+        File.WriteAllBytes(Path.Combine(vcCrystalSlot, "sav.dat"), CrystalSave());
+
+        var scanner = new EmulatorTreeScanner<string>(_engine, _tree);
+        var result = scanner.Scan(root, EmulatorKind.Azahar);
+
+        Assert.Equal(2, result.Saves.Count);
+
+        var sun = Assert.Single(result.Saves, s => s.FileName == "main");
+        Assert.Contains("Moon", sun.GameLabel);
+        Assert.Contains("00164800", sun.DocumentId);
+
+        var vc = Assert.Single(result.Saves, s => s.FileName == "sav.dat");
+        Assert.Contains("Crystal", vc.GameLabel);
+        Assert.Contains("00175E00", vc.DocumentId);
     }
 
     [Fact]

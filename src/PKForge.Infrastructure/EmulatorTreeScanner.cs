@@ -222,7 +222,7 @@ public sealed class EmulatorTreeScanner<TNode>(
     }
 
     /// <summary>
-    /// Citra-family 3DS (Azahar, Lime3DS, Citra MMJ): sdmc/Nintendo 3DS/&lt;ID0&gt;/&lt;ID1&gt;/title/00040000/&lt;game&gt;/data/00000001/main,
+    /// Citra-family 3DS (Azahar, Lime3DS, Citra MMJ): sdmc/Nintendo 3DS/&lt;ID0&gt;/&lt;ID1&gt;/title/00040000/&lt;game&gt;/data/00000001/(main | sav.dat),
     /// with the root resolved from whichever level the user granted (see <see cref="ThreeDsSaveLayout"/>).
     /// </summary>
     private List<DetectedSave> ScanThreeDs(TNode root, EmulatorKind kind,
