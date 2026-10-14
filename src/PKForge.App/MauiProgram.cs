@@ -85,6 +85,11 @@ public static class MauiProgram
         builder.Services.AddSingleton<AppUpdateService>();
         builder.Services.AddSingleton<TransferService>();
 #if ANDROID
+        builder.Services.AddSingleton<PadInputPump>(sp => new PadInputPump(
+            sp.GetRequiredService<GamepadRouter>(),
+            onHaptic: () => { try { Microsoft.Maui.Devices.HapticFeedback.Default.Perform(Microsoft.Maui.Devices.HapticFeedbackType.Click); } catch { } },
+            dispatchToUi: action => Microsoft.Maui.ApplicationModel.MainThread.BeginInvokeOnMainThread(action)
+        ));
         builder.Services.AddSingleton<ISaveFileAccess, AndroidSafFileAccess>();
         builder.Services.AddSingleton<Platforms.Android.MusicPlayer>();
         builder.Services.AddSingleton<IMusicPlayer>(sp => sp.GetRequiredService<Platforms.Android.MusicPlayer>());
