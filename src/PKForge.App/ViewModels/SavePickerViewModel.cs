@@ -549,7 +549,7 @@ public partial class SavePickerViewModel : ObservableObject
         EmulatorKind.MelonDS =>
             "Pick the folder that holds your .sav files: next to your ROMs by default, or the save folder set in melonDS's settings.",
         EmulatorKind.DraStic => "Pick DraStic's backup folder (its .dsv battery saves) or the DraStic data folder.",
-        EmulatorKind.Eden => "Pick Eden's files root, the folder that contains its emulated storage.",
+        EmulatorKind.Eden => "Pick Eden's files root, the folder that contains its emulated storage (nand/user/save).",
         _ => "Pick the folder that holds your save files.",
     };
 

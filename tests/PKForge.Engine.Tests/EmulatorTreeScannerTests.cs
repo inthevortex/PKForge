@@ -230,6 +230,38 @@ public sealed class EmulatorTreeScannerTests : IDisposable
     }
 
     [Fact]
+    public void EdenScansOldLayoutNewAccountLayoutAndDirectSaveGrant()
+    {
+        var oldRoot = Path.Combine(_temp, "eden_old");
+        var oldSlot = Path.Combine(oldRoot, "nand", "user", "save", "0000000000000000", "0000000000000001", "0100000011D90000");
+        Directory.CreateDirectory(oldSlot);
+        File.WriteAllBytes(Path.Combine(oldSlot, "main"), BdspSave(GameVersion.BD));
+
+        var scanner = new EmulatorTreeScanner<string>(_engine, _tree);
+        var oldResult = scanner.Scan(oldRoot, EmulatorKind.Eden);
+        var oldSave = Assert.Single(oldResult.Saves);
+        Assert.Contains("Brilliant Diamond", oldSave.GameLabel);
+
+        var newRoot = Path.Combine(_temp, "eden_new");
+        var newSlot = Path.Combine(newRoot, "account", "12345678123456781234567812345678", "010018E011D92000", "0");
+        Directory.CreateDirectory(newSlot);
+        File.WriteAllBytes(Path.Combine(newSlot, "main"), BdspSave(GameVersion.SP));
+
+        var newResult = scanner.Scan(newRoot, EmulatorKind.Eden);
+        var newSave = Assert.Single(newResult.Saves);
+        Assert.Contains("Shining Pearl", newSave.GameLabel);
+
+        var directSaveRoot = Path.Combine(_temp, "save");
+        var directSlot = Path.Combine(directSaveRoot, "0000000000000000", "0000000000000001", "0100000011D90000");
+        Directory.CreateDirectory(directSlot);
+        File.WriteAllBytes(Path.Combine(directSlot, "main"), BdspSave(GameVersion.BD));
+
+        var directResult = scanner.Scan(directSaveRoot, EmulatorKind.Eden);
+        var directSave = Assert.Single(directResult.Saves);
+        Assert.Contains("Brilliant Diamond", directSave.GameLabel);
+    }
+
+    [Fact]
     public void EdenPrefixSegmentsMatchCaseSensitively()
     {
         var root = Path.Combine(_temp, "eden_case");
@@ -241,6 +273,51 @@ public sealed class EmulatorTreeScannerTests : IDisposable
 
         Assert.Empty(result.Saves);
         Assert.Contains(result.Diagnostics!, d => d.Contains("Missing directory segment 'nand'"));
+    }
+
+    [Theory]
+    [InlineData("Account")]
+    [InlineData("ACCOUNT")]
+    [InlineData("Save")]
+    public void EdenRootGrantNameMatchesCaseSensitively(string grantName)
+    {
+        var root = Path.Combine(_temp, "eden_root_case", grantName);
+        var slot = Path.Combine(root, "12345678123456781234567812345678", "010018E011D92000", "0");
+        Directory.CreateDirectory(slot);
+        File.WriteAllBytes(Path.Combine(slot, "main"), BdspSave(GameVersion.SP));
+
+        var result = new EmulatorTreeScanner<string>(_engine, _tree).Scan(root, EmulatorKind.Eden);
+
+        Assert.Empty(result.Saves);
+        Assert.DoesNotContain(result.Diagnostics!, d => d.Contains("Eden root grant recognized by root name"));
+    }
+
+    [Fact]
+    public void EdenRootGrantNamedAccountIsWalkedDirectly()
+    {
+        var root = Path.Combine(_temp, "eden_root_exact", "account");
+        var slot = Path.Combine(root, "12345678123456781234567812345678", "010018E011D92000", "0");
+        Directory.CreateDirectory(slot);
+        File.WriteAllBytes(Path.Combine(slot, "main"), BdspSave(GameVersion.SP));
+
+        var result = new EmulatorTreeScanner<string>(_engine, _tree).Scan(root, EmulatorKind.Eden);
+
+        Assert.Contains("Shining Pearl", Assert.Single(result.Saves).GameLabel);
+        Assert.Contains(result.Diagnostics!, d => d.Contains("Eden root grant recognized by root name 'account'"));
+    }
+
+    [Fact]
+    public void EdenAccountChildMatchesCaseSensitively()
+    {
+        var root = Path.Combine(_temp, "eden_child_case");
+        var slot = Path.Combine(root, "Account", "12345678123456781234567812345678", "010018E011D92000", "0");
+        Directory.CreateDirectory(slot);
+        File.WriteAllBytes(Path.Combine(slot, "main"), BdspSave(GameVersion.SP));
+
+        var result = new EmulatorTreeScanner<string>(_engine, _tree).Scan(root, EmulatorKind.Eden);
+
+        Assert.Empty(result.Saves);
+        Assert.DoesNotContain(result.Diagnostics!, d => d.Contains("Eden root recognized: root contains"));
     }
 
     [Fact]

@@ -179,20 +179,42 @@ public sealed class EmulatorTreeScanner<TNode>(
     /// <summary>
     /// Eden (Switch): saves are files named "main" (or "*.bin" for BDSP) under nand/user/save/…
     /// The user may have granted the files root, nand/, or user/ - try each prefix.
+    /// A grant of save/, account/ or 0000000000000000/ itself, or of a folder holding
+    /// account/ or 0000000000000000/, is walked as the save root directly.
     /// </summary>
     private List<DetectedSave> ScanEden(TNode root, CancellationToken cancellationToken,
         ScanState state, Action<DetectedSave>? onSave)
     {
-        string[][] prefixes = [["nand", "user", "save"], ["user", "save"], ["save"]];
+        var rootName = tree.RootName(root);
         TNode? saveDir = null;
-        foreach (var prefix in prefixes)
+
+        if (IsEdenSaveDirName(rootName))
         {
-            state.Trace($"Trying Eden prefix {string.Join('/', prefix)}");
-            saveDir = NavigatePath(root, prefix, state.Trace);
-            state.Trace(saveDir is null ? "Prefix not found" : $"Save root found via prefix {string.Join('/', prefix)}");
-            if (saveDir is not null)
-                break;
+            state.Trace($"Eden root grant recognized by root name '{rootName}'");
+            saveDir = root;
         }
+        else
+        {
+            var rootChildren = tree.List(root);
+            if (rootChildren.Any(x => x.IsDirectory && IsEdenDirectChild(x.Name)))
+            {
+                state.Trace("Eden root recognized: root contains account or 0000000000000000 directory");
+                saveDir = root;
+            }
+            else
+            {
+                string[][] prefixes = [["nand", "user", "save"], ["user", "save"], ["save"]];
+                foreach (var prefix in prefixes)
+                {
+                    state.Trace($"Trying Eden prefix {string.Join('/', prefix)}");
+                    saveDir = NavigatePath(root, prefix, state.Trace);
+                    state.Trace(saveDir is null ? "Prefix not found" : $"Save root found via prefix {string.Join('/', prefix)}");
+                    if (saveDir is not null)
+                        break;
+                }
+            }
+        }
+
         if (saveDir is null)
         {
             state.Trace("EDEN FAILURE: none of nand/user/save, user/save, or save exists under the granted root");
@@ -220,6 +242,10 @@ public sealed class EmulatorTreeScanner<TNode>(
         }, state, diagnostic: true);
         return results;
     }
+
+    private static bool IsEdenSaveDirName(string name) => name is "save" or "account" or "0000000000000000";
+
+    private static bool IsEdenDirectChild(string name) => name is "account" or "0000000000000000";
 
     /// <summary>
     /// Citra-family 3DS (Azahar, Lime3DS, Citra MMJ): sdmc/Nintendo 3DS/&lt;ID0&gt;/&lt;ID1&gt;/title/00040000/&lt;game&gt;/data/00000001/(main | sav.dat),

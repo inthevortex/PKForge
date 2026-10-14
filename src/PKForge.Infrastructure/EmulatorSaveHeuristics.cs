@@ -22,6 +22,7 @@ public static class EmulatorSaveHeuristics
         ["0100000011D90000"] = "Brilliant Diamond",
         ["010018E011D92000"] = "Shining Pearl",
         ["01001F5010B28000"] = "Legends: Arceus",
+        ["01001F5010DFA000"] = "Legends: Arceus",
         ["0100A3D008C5C000"] = "Scarlet",
         ["01008F6008C5E000"] = "Violet",
         ["0100F43008C44000"] = "Legends: Z-A",
