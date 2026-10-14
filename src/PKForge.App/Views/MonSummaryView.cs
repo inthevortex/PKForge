@@ -470,14 +470,14 @@ public sealed class MonSummaryView : ContentView
         }
         SKPath Polygon(Func<int, float> r)
         {
-            var path = new SKPath();
+            using var builder = new SKPathBuilder();
             for (var i = 0; i < 6; i++)
             {
                 var p = Point(i, r(i));
-                if (i == 0) path.MoveTo(p); else path.LineTo(p);
+                if (i == 0) builder.MoveTo(p); else builder.LineTo(p);
             }
-            path.Close();
-            return path;
+            builder.Close();
+            return builder.Detach();
         }
 
         using (var back = Polygon(_ => radius + 20))
@@ -1028,32 +1028,32 @@ public sealed class MonSummaryView : ContentView
     /// <summary>A tab: rounded on the left, its right edge slanting out toward the bottom.</summary>
     private static SKPath Tab(SKRect r, float radius, float slant)
     {
-        var path = new SKPath();
-        path.MoveTo(r.Left + radius, r.Top);
-        path.LineTo(r.Right - slant, r.Top);
-        path.LineTo(r.Right, r.Bottom);
-        path.LineTo(r.Left + radius, r.Bottom);
+        using var builder = new SKPathBuilder();
+        builder.MoveTo(r.Left + radius, r.Top);
+        builder.LineTo(r.Right - slant, r.Top);
+        builder.LineTo(r.Right, r.Bottom);
+        builder.LineTo(r.Left + radius, r.Bottom);
         if (radius > 0)
         {
-            path.ArcTo(new SKRect(r.Left, r.Bottom - 2 * radius, r.Left + 2 * radius, r.Bottom), 90, 90, false);
-            path.LineTo(r.Left, r.Top + radius);
-            path.ArcTo(new SKRect(r.Left, r.Top, r.Left + 2 * radius, r.Top + 2 * radius), 180, 90, false);
+            builder.ArcTo(new SKRect(r.Left, r.Bottom - 2 * radius, r.Left + 2 * radius, r.Bottom), 90, 90, false);
+            builder.LineTo(r.Left, r.Top + radius);
+            builder.ArcTo(new SKRect(r.Left, r.Top, r.Left + 2 * radius, r.Top + 2 * radius), 180, 90, false);
         }
-        else path.LineTo(r.Left, r.Top);
-        path.Close();
-        return path;
+        else builder.LineTo(r.Left, r.Top);
+        builder.Close();
+        return builder.Detach();
     }
 
     /// <summary>A parallelogram leaning right: the tab strip and the active tab.</summary>
     private static SKPath Parallelogram(SKRect r, float slant)
     {
-        var path = new SKPath();
-        path.MoveTo(r.Left + slant, r.Top);
-        path.LineTo(r.Right, r.Top);
-        path.LineTo(r.Right - slant, r.Bottom);
-        path.LineTo(r.Left, r.Bottom);
-        path.Close();
-        return path;
+        using var builder = new SKPathBuilder();
+        builder.MoveTo(r.Left + slant, r.Top);
+        builder.LineTo(r.Right, r.Top);
+        builder.LineTo(r.Right - slant, r.Bottom);
+        builder.LineTo(r.Left, r.Bottom);
+        builder.Close();
+        return builder.Detach();
     }
 
     private static void Fill(SKCanvas c, SKPath path, SKColor top, SKColor bottom)

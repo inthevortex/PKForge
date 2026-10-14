@@ -29,13 +29,16 @@ internal static class SummaryInk
         return font;
     }
 
+    // Glyph ids do not depend on the font size, so one cached font per face serves every lookup.
+    private static ushort Glyph(SKTypeface face, int rune) => Font(face, 12, bold: false).GetGlyph(rune);
+
     private static SKTypeface FaceFor(int rune)
     {
         var pixel = PixelFont.Face;
-        if (rune == ' ' || pixel.GetGlyph(rune) != 0) return pixel;
+        if (rune == ' ' || Glyph(pixel, rune) != 0) return pixel;
         if (Fallbacks.TryGetValue(rune, out var cached)) return cached;
         var rounded = PixelFont.FallbackFace;
-        var face = rounded.GetGlyph(rune) != 0 ? rounded : SKFontManager.Default.MatchCharacter(rune) ?? SKTypeface.Default;
+        var face = Glyph(rounded, rune) != 0 ? rounded : SKFontManager.Default.MatchCharacter(rune) ?? SKTypeface.Default;
         // Only remember real answers: the bundled faces load asynchronously.
         if (!ReferenceEquals(rounded, SKTypeface.Default)) Fallbacks[rune] = face;
         return face;

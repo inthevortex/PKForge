@@ -249,13 +249,14 @@ public static class EventGallery
     private static void DrawShinyStar(SKCanvas canvas, float cx, float cy, float r)
     {
         using var paint = new SKPaint { Color = Pksm.ShinyGold, Style = SKPaintStyle.Fill, IsAntialias = true };
-        using var path = new SKPath();
-        path.MoveTo(cx, cy - r);
-        path.QuadTo(cx, cy, cx + r, cy);
-        path.QuadTo(cx, cy, cx, cy + r);
-        path.QuadTo(cx, cy, cx - r, cy);
-        path.QuadTo(cx, cy, cx, cy - r);
-        path.Close();
+        using var builder = new SKPathBuilder();
+        builder.MoveTo(cx, cy - r);
+        builder.QuadTo(cx, cy, cx + r, cy);
+        builder.QuadTo(cx, cy, cx, cy + r);
+        builder.QuadTo(cx, cy, cx - r, cy);
+        builder.QuadTo(cx, cy, cx, cy - r);
+        builder.Close();
+        using var path = builder.Detach();
         canvas.DrawPath(path, paint);
     }
 
@@ -1613,7 +1614,7 @@ public static class EventGallery
                 prerendered = RenderSparkles(info);
                 prerenderedSize = info.Size;
             }
-            args.Surface.Canvas.DrawBitmap(prerendered, 0, 0);
+            args.Surface.Canvas.DrawBitmap(prerendered, 0, 0, SKSamplingOptions.Default);
         };
         canvasView.Unloaded += (_, _) =>
         {

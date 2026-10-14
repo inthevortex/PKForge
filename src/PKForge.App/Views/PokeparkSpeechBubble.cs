@@ -55,7 +55,7 @@ public sealed class PokeparkSpeechBubble : IPadHandler
                 var source = frame?.Source ?? SKRect.Create(bitmap.Width, bitmap.Height);
                 var scale = Math.Min(e.Info.Width / source.Width, e.Info.Height / source.Height);
                 var w = source.Width * scale; var h = source.Height * scale;
-                c.DrawBitmap(bitmap, source, SKRect.Create((e.Info.Width - w) / 2, (e.Info.Height - h) / 2, w, h));
+                c.DrawBitmap(bitmap, source, SKRect.Create((e.Info.Width - w) / 2, (e.Info.Height - h) / 2, w, h), SKSamplingOptions.Default);
             };
             body.Add(portrait);
         }
@@ -74,8 +74,9 @@ public sealed class PokeparkSpeechBubble : IPadHandler
         {
             var c = e.Surface.Canvas; c.Clear(SKColors.Transparent);
             using var p = new SKPaint { Color = SKColor.Parse("#355443"), IsAntialias = false };
-            using var triangle = new SKPath(); triangle.MoveTo(0, e.Info.Height); triangle.LineTo(e.Info.Width * .8f, 0);
-            triangle.LineTo(e.Info.Width, e.Info.Height); triangle.Close(); c.DrawPath(triangle, p);
+            using var triangleBuilder = new SKPathBuilder(); triangleBuilder.MoveTo(0, e.Info.Height); triangleBuilder.LineTo(e.Info.Width * .8f, 0);
+            triangleBuilder.LineTo(e.Info.Width, e.Info.Height); triangleBuilder.Close();
+            using var triangle = triangleBuilder.Detach(); c.DrawPath(triangle, p);
             p.Color = SKColor.Parse("#FFF9E6"); c.Save(); c.Translate(0, 5); c.DrawPath(triangle, p); c.Restore();
         };
         var stack = new VerticalStackLayout { Spacing = 0, Children = { tail, nameplate, window },

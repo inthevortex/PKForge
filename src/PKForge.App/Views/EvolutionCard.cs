@@ -305,10 +305,11 @@ public sealed class EvolutionCard : IPadHandler
         {
             stroke.Color = accent.WithAlpha((byte)(110 + i * 70));
             var x = cx - size * 1.6f + i * size * 1.2f;
-            using var path = new SKPath();
-            path.MoveTo(x, cy - size);
-            path.LineTo(x + size, cy);
-            path.LineTo(x, cy + size);
+            using var builder = new SKPathBuilder();
+            builder.MoveTo(x, cy - size);
+            builder.LineTo(x + size, cy);
+            builder.LineTo(x, cy + size);
+            using var path = builder.Detach();
             canvas.DrawPath(path, stroke);
         }
 

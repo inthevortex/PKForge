@@ -113,25 +113,27 @@ public static class EditorPaint
         {
             foreach (var x in new[] { left + 10f * unit, right - 10f * unit })
             {
-                using var path = new SKPath();
+                using var builder = new SKPathBuilder();
                 var s = 7f * unit;
-                path.MoveTo(x, cy - s);
-                path.LineTo(x + s, cy);
-                path.LineTo(x, cy + s);
-                path.LineTo(x - s, cy);
-                path.Close();
+                builder.MoveTo(x, cy - s);
+                builder.LineTo(x + s, cy);
+                builder.LineTo(x, cy + s);
+                builder.LineTo(x - s, cy);
+                builder.Close();
+                using var path = builder.Detach();
                 c.DrawPath(path, diamond);
             }
         }
 
         var slant = 15f * unit;
         var chip = new SKRect(chipLeft, cy - 25f * unit, chipRight, cy + 25f * unit);
-        using var shape = new SKPath();
-        shape.MoveTo(chip.Left + slant, chip.Top);
-        shape.LineTo(chip.Right, chip.Top);
-        shape.LineTo(chip.Right - slant, chip.Bottom);
-        shape.LineTo(chip.Left, chip.Bottom);
-        shape.Close();
+        using var shapeBuilder = new SKPathBuilder();
+        shapeBuilder.MoveTo(chip.Left + slant, chip.Top);
+        shapeBuilder.LineTo(chip.Right, chip.Top);
+        shapeBuilder.LineTo(chip.Right - slant, chip.Bottom);
+        shapeBuilder.LineTo(chip.Left, chip.Bottom);
+        shapeBuilder.Close();
+        using var shape = shapeBuilder.Detach();
         using (var gradient = new SKPaint
         {
             IsAntialias = true,
@@ -172,16 +174,16 @@ public static class EditorPaint
     // A tab shape: rounded left corners, right edge slanting out toward the bottom.
     private static SKPath Tab(SKRect r, float radius, float slant)
     {
-        var path = new SKPath();
-        path.MoveTo(r.Left + radius, r.Top);
-        path.LineTo(r.Right - slant, r.Top);
-        path.LineTo(r.Right, r.Bottom);
-        path.LineTo(r.Left + radius, r.Bottom);
-        path.ArcTo(new SKRect(r.Left, r.Bottom - 2 * radius, r.Left + 2 * radius, r.Bottom), 90, 90, false);
-        path.LineTo(r.Left, r.Top + radius);
-        path.ArcTo(new SKRect(r.Left, r.Top, r.Left + 2 * radius, r.Top + 2 * radius), 180, 90, false);
-        path.Close();
-        return path;
+        using var builder = new SKPathBuilder();
+        builder.MoveTo(r.Left + radius, r.Top);
+        builder.LineTo(r.Right - slant, r.Top);
+        builder.LineTo(r.Right, r.Bottom);
+        builder.LineTo(r.Left + radius, r.Bottom);
+        builder.ArcTo(new SKRect(r.Left, r.Bottom - 2 * radius, r.Left + 2 * radius, r.Bottom), 90, 90, false);
+        builder.LineTo(r.Left, r.Top + radius);
+        builder.ArcTo(new SKRect(r.Left, r.Top, r.Left + 2 * radius, r.Top + 2 * radius), 180, 90, false);
+        builder.Close();
+        return builder.Detach();
     }
 
     private static void Text(SKCanvas c, string text, float x, float cy, SKFont font, SKColor color, float maxWidth = float.MaxValue)

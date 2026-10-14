@@ -235,11 +235,12 @@ public static class PksmPaint
         void Cap(SKRect cap, bool left, bool enabled)
         {
             BlackButton(c, cap, 3);
-            using var path = new SKPath();
+            using var builder = new SKPathBuilder();
             var cx = cap.MidX;
             var arm = Math.Min(4.5f, cap.Height * 0.2f);
-            if (left) { path.MoveTo(cx + arm * 0.6f, cap.MidY - arm); path.LineTo(cx - arm * 0.6f, cap.MidY); path.LineTo(cx + arm * 0.6f, cap.MidY + arm); }
-            else { path.MoveTo(cx - arm * 0.6f, cap.MidY - arm); path.LineTo(cx + arm * 0.6f, cap.MidY); path.LineTo(cx - arm * 0.6f, cap.MidY + arm); }
+            if (left) { builder.MoveTo(cx + arm * 0.6f, cap.MidY - arm); builder.LineTo(cx - arm * 0.6f, cap.MidY); builder.LineTo(cx + arm * 0.6f, cap.MidY + arm); }
+            else { builder.MoveTo(cx - arm * 0.6f, cap.MidY - arm); builder.LineTo(cx + arm * 0.6f, cap.MidY); builder.LineTo(cx - arm * 0.6f, cap.MidY + arm); }
+            using var path = builder.Detach();
             using var chevron = new SKPaint
             {
                 Color = enabled ? Pksm.Ink : Pksm.Ink.WithAlpha(0x40), IsAntialias = true,
@@ -254,11 +255,12 @@ public static class PksmPaint
     /// <summary>The red triangle cursor (touch/grid contexts).</summary>
     public static void Pointer(SKCanvas c, SKPoint tip, float size = 14)
     {
-        var path = new SKPath();
-        path.MoveTo(tip.X, tip.Y);
-        path.LineTo(tip.X, tip.Y + size * 1.2f);
-        path.LineTo(tip.X + size * 0.8f, tip.Y + size * 0.75f);
-        path.Close();
+        using var builder = new SKPathBuilder();
+        builder.MoveTo(tip.X, tip.Y);
+        builder.LineTo(tip.X, tip.Y + size * 1.2f);
+        builder.LineTo(tip.X + size * 0.8f, tip.Y + size * 0.75f);
+        builder.Close();
+        using var path = builder.Detach();
         c.DrawPath(path, Paint(Pksm.CursorRed));
         c.DrawPath(path, Stroke(Pksm.Illegal, 1.5f));
     }
@@ -309,16 +311,17 @@ public static class PksmPaint
     /// <summary>White 4-point sparkle star (mystery-gift screens).</summary>
     public static void Sparkle(SKCanvas c, SKPoint center, float size)
     {
-        var path = new SKPath();
-        path.MoveTo(center.X, center.Y - size);
-        path.LineTo(center.X + size * 0.28f, center.Y - size * 0.28f);
-        path.LineTo(center.X + size, center.Y);
-        path.LineTo(center.X + size * 0.28f, center.Y + size * 0.28f);
-        path.LineTo(center.X, center.Y + size);
-        path.LineTo(center.X - size * 0.28f, center.Y + size * 0.28f);
-        path.LineTo(center.X - size, center.Y);
-        path.LineTo(center.X - size * 0.28f, center.Y - size * 0.28f);
-        path.Close();
+        using var builder = new SKPathBuilder();
+        builder.MoveTo(center.X, center.Y - size);
+        builder.LineTo(center.X + size * 0.28f, center.Y - size * 0.28f);
+        builder.LineTo(center.X + size, center.Y);
+        builder.LineTo(center.X + size * 0.28f, center.Y + size * 0.28f);
+        builder.LineTo(center.X, center.Y + size);
+        builder.LineTo(center.X - size * 0.28f, center.Y + size * 0.28f);
+        builder.LineTo(center.X - size, center.Y);
+        builder.LineTo(center.X - size * 0.28f, center.Y - size * 0.28f);
+        builder.Close();
+        using var path = builder.Detach();
         c.DrawPath(path, Paint(SKColors.White));
     }
 

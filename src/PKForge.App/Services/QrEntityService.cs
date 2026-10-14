@@ -152,7 +152,7 @@ public static class QrEntityService
         var rgba = new byte[info.Width * info.Height * 4];
         using var surface = SKSurface.Create(new SKImageInfo(info.Width, info.Height, SKColorType.Rgba8888, SKAlphaType.Opaque));
         surface.Canvas.Clear(SKColors.White);
-        surface.Canvas.DrawBitmap(source, 0, 0);
+        surface.Canvas.DrawBitmap(source, 0, 0, SKSamplingOptions.Default);
         using var pixels = surface.PeekPixels();
         pixels!.GetPixelSpan().CopyTo(rgba);
         return rgba;

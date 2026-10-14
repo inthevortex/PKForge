@@ -383,17 +383,18 @@ public static class BoxGridRenderer
     /// <summary>Four-point gold sparkle star for shinies - shared with the Bank grid.</summary>
     public static void DrawSparkle(SKCanvas canvas, float cx, float cy, float radius, SKPaint paint)
     {
-        using var path = new SKPath();
+        using var builder = new SKPathBuilder();
         var waist = radius * 0.32f;
-        path.MoveTo(cx, cy - radius);
-        path.LineTo(cx + waist, cy - waist);
-        path.LineTo(cx + radius, cy);
-        path.LineTo(cx + waist, cy + waist);
-        path.LineTo(cx, cy + radius);
-        path.LineTo(cx - waist, cy + waist);
-        path.LineTo(cx - radius, cy);
-        path.LineTo(cx - waist, cy - waist);
-        path.Close();
+        builder.MoveTo(cx, cy - radius);
+        builder.LineTo(cx + waist, cy - waist);
+        builder.LineTo(cx + radius, cy);
+        builder.LineTo(cx + waist, cy + waist);
+        builder.LineTo(cx, cy + radius);
+        builder.LineTo(cx - waist, cy + waist);
+        builder.LineTo(cx - radius, cy);
+        builder.LineTo(cx - waist, cy - waist);
+        builder.Close();
+        using var path = builder.Detach();
         canvas.DrawPath(path, paint);
     }
 

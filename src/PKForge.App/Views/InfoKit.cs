@@ -117,15 +117,16 @@ public static class InfoKit
                 case MoveCategory.Physical:
                 {
                     // Eight-point impact burst.
-                    using var path = new SKPath();
+                    using var builder = new SKPathBuilder();
                     for (var i = 0; i < 16; i++)
                     {
                         var angle = i * MathF.PI / 8 - MathF.PI / 2;
                         var len = i % 2 == 0 ? s * 1.35f : s * 0.55f;
                         var p = new SKPoint(cx + MathF.Cos(angle) * len, cy + MathF.Sin(angle) * len);
-                        if (i == 0) path.MoveTo(p); else path.LineTo(p);
+                        if (i == 0) builder.MoveTo(p); else builder.LineTo(p);
                     }
-                    path.Close();
+                    builder.Close();
+                    using var path = builder.Detach();
                     c.DrawPath(path, ink);
                     break;
                 }

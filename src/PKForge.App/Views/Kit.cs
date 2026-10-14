@@ -37,7 +37,7 @@ public static class Kit
                 prerenderedSize = info.Size;
                 prerenderedTheme = ColorTheme.Version;
             }
-            args.Surface.Canvas.DrawBitmap(prerendered, 0, 0);
+            args.Surface.Canvas.DrawBitmap(prerendered, 0, 0, SKSamplingOptions.Default);
         };
         canvasView.Unloaded += (_, _) =>
         {

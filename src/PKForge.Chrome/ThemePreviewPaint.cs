@@ -114,12 +114,12 @@ public static class ThemePreviewPaint
     // unless it is flush with a panel's side).
     private static SKPath Slanted(SKRect r, float slant, bool leftSquare = false)
     {
-        var path = new SKPath();
-        path.MoveTo(leftSquare ? r.Left : r.Left + slant, r.Top);
-        path.LineTo(r.Right - slant, r.Top);
-        path.LineTo(r.Right, r.Bottom);
-        path.LineTo(r.Left, r.Bottom);
-        path.Close();
-        return path;
+        using var builder = new SKPathBuilder();
+        builder.MoveTo(leftSquare ? r.Left : r.Left + slant, r.Top);
+        builder.LineTo(r.Right - slant, r.Top);
+        builder.LineTo(r.Right, r.Bottom);
+        builder.LineTo(r.Left, r.Bottom);
+        builder.Close();
+        return builder.Detach();
     }
 }

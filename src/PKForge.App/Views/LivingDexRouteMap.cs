@@ -223,10 +223,11 @@ public sealed class LivingDexRouteMap : SKCanvasView
 
     private void DrawRoute(SKCanvas c, SKRect from, SKRect to, float unit, bool running)
     {
-        using var path = new SKPath();
+        using var builder = new SKPathBuilder();
         var first = RoutePoint(from, to, 0);
-        path.MoveTo(first);
-        for (var i = 1; i <= 24; i++) path.LineTo(RoutePoint(from, to, i / 24f));
+        builder.MoveTo(first);
+        for (var i = 1; i <= 24; i++) builder.LineTo(RoutePoint(from, to, i / 24f));
+        using var path = builder.Detach();
         // The dashes march while the autopilot runs: the route is live.
         var phase = running ? (float)(_clock.Elapsed.TotalMilliseconds / 40 % 16) : 0;
         using var under = new SKPaint { Color = Pksm.Paper, Style = SKPaintStyle.Stroke, StrokeWidth = 6 * unit, IsAntialias = true, StrokeCap = SKStrokeCap.Round };
@@ -319,10 +320,11 @@ public sealed class LivingDexRouteMap : SKCanvasView
         using var mark = new SKPaint { Color = Pksm.Paper, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 3 * unit, StrokeCap = SKStrokeCap.Round };
         var radius = 11 * unit;
         c.DrawCircle(center, radius, fill);
-        using var path = new SKPath();
-        path.MoveTo(center.X - radius * 0.45f, center.Y);
-        path.LineTo(center.X - radius * 0.1f, center.Y + radius * 0.38f);
-        path.LineTo(center.X + radius * 0.5f, center.Y - radius * 0.35f);
+        using var builder = new SKPathBuilder();
+        builder.MoveTo(center.X - radius * 0.45f, center.Y);
+        builder.LineTo(center.X - radius * 0.1f, center.Y + radius * 0.38f);
+        builder.LineTo(center.X + radius * 0.5f, center.Y - radius * 0.35f);
+        using var path = builder.Detach();
         c.DrawPath(path, mark);
     }
 

@@ -99,7 +99,8 @@ public static class PixelFont
     public static SKFont For(string text, float size)
     {
         var face = Face;
-        var covered = text.All(c => face.GetGlyph(c) != 0);
+        using var probe = new SKFont(face);
+        var covered = text.All(c => probe.GetGlyph(c) != 0);
         return new SKFont(covered ? face : SKTypeface.Default, size) { Edging = SKFontEdging.Antialias, Embolden = true };
     }
 }

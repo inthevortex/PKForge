@@ -689,7 +689,7 @@ public sealed class SpriteService : ISpriteService
 
         var cropped = new SKBitmap(right - left + 1, bottom - top + 1);
         using var canvas = new SKCanvas(cropped);
-        canvas.DrawBitmap(source, new SKRect(left, top, right + 1, bottom + 1), new SKRect(0, 0, cropped.Width, cropped.Height));
+        canvas.DrawBitmap(source, new SKRect(left, top, right + 1, bottom + 1), new SKRect(0, 0, cropped.Width, cropped.Height), SKSamplingOptions.Default);
         source.Dispose();
         return cropped;
     }
