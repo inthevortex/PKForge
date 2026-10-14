@@ -20,6 +20,7 @@ public static class MauiProgram
         App.Trace("CreateMauiApp enter");
 #if ANDROID
         Views.CapsuleSkin.Register();
+        Platforms.Android.AndroidScrollTo.Register();
 #endif
         builder.UseMauiApp<App>().UseSkiaSharp()
             .ConfigureFonts(fonts =>
