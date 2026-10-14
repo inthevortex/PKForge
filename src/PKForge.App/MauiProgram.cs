@@ -115,7 +115,10 @@ public static class MauiProgram
         builder.Services.AddSingleton<ISecondaryDisplayHost, AndroidSecondaryDisplayHost>();
         builder.Services.AddSingleton<IFolderPicker, AndroidFolderPicker>();
         builder.Services.AddSingleton<IFolderFileAccess, AndroidFolderFileAccess>();
-        builder.Services.AddSingleton<IEmulatorDetectionService, AndroidEmulatorScanner>();
+        builder.Services.AddSingleton<AndroidEmulatorScanner>();
+        builder.Services.AddSingleton<IEmulatorDetectionService>(sp => sp.GetRequiredService<AndroidEmulatorScanner>());
+        builder.Services.AddSingleton<IIncrementalEmulatorDetectionService>(sp => sp.GetRequiredService<AndroidEmulatorScanner>());
+        builder.Services.AddSingleton<IEmulatorRootDiscovery, NullEmulatorRootDiscovery>();
         builder.Services.AddSingleton<IAppPlatform, Platforms.Android.AndroidAppPlatform>();
         builder.Services.AddSingleton<IUpdateInstaller, Platforms.Android.AndroidUpdateInstaller>();
 #elif PKFORGE_DESKTOP
@@ -124,6 +127,10 @@ public static class MauiProgram
         builder.Services.AddSingleton<ISecondaryDisplayHost, Platforms.Desktop.NullSecondaryDisplayHost>();
         builder.Services.AddSingleton<IFolderPicker, Platforms.Desktop.DesktopFolderPicker>();
         builder.Services.AddSingleton<IFolderFileAccess, Platforms.Desktop.PosixFolderFileAccess>();
+        builder.Services.AddSingleton<Platforms.Desktop.DesktopEmulatorScanner>();
+        builder.Services.AddSingleton<IEmulatorDetectionService>(sp => sp.GetRequiredService<Platforms.Desktop.DesktopEmulatorScanner>());
+        builder.Services.AddSingleton<IIncrementalEmulatorDetectionService>(sp => sp.GetRequiredService<Platforms.Desktop.DesktopEmulatorScanner>());
+        builder.Services.AddSingleton<IEmulatorRootDiscovery, LinuxEmulatorRootDiscovery>();
         builder.Services.AddSingleton<IAppPlatform, Platforms.Desktop.DesktopAppPlatform>();
 
         var desktopDisplay = new Platforms.Desktop.DesktopDeviceDisplay();

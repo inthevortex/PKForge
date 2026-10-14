@@ -105,6 +105,8 @@ public static class SaveDescriptions
         EmulatorKind.PizzaBoyGba => "Pizza Boy GBA",
         EmulatorKind.PizzaBoyGbc => "Pizza Boy GBC",
         EmulatorKind.CitraMmj => "Citra MMJ",
+        EmulatorKind.Ryujinx => "Ryujinx",
+        EmulatorKind.RomFolder => "ROM Folder",
         _ => kind.ToString(),
     };
 }
@@ -236,6 +238,12 @@ public partial class SavePickerViewModel : ObservableObject
 
     [RelayCommand]
     private Task AddPizzaBoyGbcAsync() => AddRootAndScanAsync(EmulatorKind.PizzaBoyGbc);
+
+    [RelayCommand]
+    private Task AddRyujinxAsync() => AddRootAndScanAsync(EmulatorKind.Ryujinx);
+
+    [RelayCommand]
+    private Task AddRomFolderAsync() => AddRootAndScanAsync(EmulatorKind.RomFolder);
 
     [RelayCommand]
     public async Task RescanAsync()
@@ -541,6 +549,48 @@ public partial class SavePickerViewModel : ObservableObject
             + WhereToPoint(kind) + " The folder stays linked; unlink it from Manage linked storage.");
     }
 
+    public bool IsRootWatched(string treeId)
+    {
+        return _roots.GetRoots().Any(r => string.Equals(r.TreeId, treeId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public async Task AddDiscoveredRootAsync(DiscoveredRoot discovered)
+    {
+        if (IsBusy) return;
+        _roots.AddRoot(new WatchedRoot(discovered.Kind, discovered.TreeId, discovered.DisplayName));
+        CompleteSetup();
+        await RescanAsync();
+
+        var found = _savesPerRoot.GetValueOrDefault(discovered.TreeId);
+        var emulator = SaveDescriptions.EmulatorName(discovered.Kind);
+        if (found > 0)
+        {
+            LinkReported?.Invoke($"{emulator} linked",
+                $"Found {found} Pokémon save{(found == 1 ? "" : "s")} in {discovered.DisplayName}.");
+            return;
+        }
+        var rejected = _rejectedCandidates.Count(r => r.StartsWith($"{discovered.Kind}:", StringComparison.Ordinal));
+        LinkReported?.Invoke($"No saves found in {discovered.DisplayName}",
+            (rejected > 0 ? $"{rejected} file(s) looked like saves but could not be read. " : "")
+            + WhereToPoint(discovered.Kind) + " The folder stays linked; unlink it from Manage linked storage.");
+    }
+
+    public async Task AddDiscoveredRootsAsync(IReadOnlyList<DiscoveredRoot> discoveredList)
+    {
+        if (IsBusy) return;
+        foreach (var discovered in discoveredList)
+        {
+            if (!IsRootWatched(discovered.TreeId))
+                _roots.AddRoot(new WatchedRoot(discovered.Kind, discovered.TreeId, discovered.DisplayName));
+        }
+        CompleteSetup();
+        await RescanAsync();
+
+        var totalFound = discoveredList.Sum(d => _savesPerRoot.GetValueOrDefault(d.TreeId));
+        LinkReported?.Invoke("Emulators linked",
+            $"Linked {discoveredList.Count} storage location{(discoveredList.Count == 1 ? "" : "s")}, found {totalFound} save{(totalFound == 1 ? "" : "s")}.");
+    }
+
     /// <summary>Which folder to pick, per emulator, for the "nothing found" message.</summary>
     private static string WhereToPoint(EmulatorKind kind) => kind switch
     {
@@ -550,6 +600,9 @@ public partial class SavePickerViewModel : ObservableObject
             "Pick the folder that holds your .sav files: next to your ROMs by default, or the save folder set in melonDS's settings.",
         EmulatorKind.DraStic => "Pick DraStic's backup folder (its .dsv battery saves) or the DraStic data folder.",
         EmulatorKind.Eden => "Pick Eden's files root, the folder that contains its emulated storage (nand/user/save).",
+        EmulatorKind.Ryujinx => "Pick Ryujinx's save folder (bis/user/save) or the Ryujinx user data directory.",
+        EmulatorKind.RomFolder => "Pick the folder containing your Pokémon ROMs and .sav files, or mGBA's save folder if you set one.",
+        EmulatorKind.Dolphin => "Pick Dolphin's GC folder or Card A / Card B containing .gci saves.",
         _ => "Pick the folder that holds your save files.",
     };
 

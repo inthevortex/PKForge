@@ -19,6 +19,7 @@ public sealed class EmulatorTreeScanner<TNode>(
     // Saves are small; a matching extension on a ROM/archive must not stall the scan.
     private const long MaxSaveBytes = 32 * 1024 * 1024;
     private const int MaxCacheEntries = 512;
+    private const int MaxImkvdbBytes = 1024 * 1024;
 
     private readonly IScanCacheStore? _cacheStore = cacheStore;
     private readonly long _buildEpoch = buildEpoch;
@@ -60,9 +61,11 @@ public sealed class EmulatorTreeScanner<TNode>(
             found = kind switch
             {
                 EmulatorKind.RetroArch or EmulatorKind.MelonDS or EmulatorKind.Linkboy or
-                EmulatorKind.DraStic or EmulatorKind.PizzaBoyGba or EmulatorKind.PizzaBoyGbc or EmulatorKind.Dolphin =>
+                EmulatorKind.DraStic or EmulatorKind.PizzaBoyGba or EmulatorKind.PizzaBoyGbc or
+                EmulatorKind.Dolphin or EmulatorKind.RomFolder =>
                     ScanFlatFolder(root, kind, cancellationToken, state, onSave),
                 EmulatorKind.Eden => ScanEden(root, cancellationToken, state, onSave),
+                EmulatorKind.Ryujinx => ScanRyujinx(root, cancellationToken, state, onSave),
                 EmulatorKind.Azahar or EmulatorKind.CitraMmj => ScanThreeDs(root, kind, cancellationToken, state, onSave),
                 _ => [],
             };
@@ -158,6 +161,7 @@ public sealed class EmulatorTreeScanner<TNode>(
             EmulatorKind.Dolphin => ["GC"],
             EmulatorKind.DraStic => ["backup"],
             EmulatorKind.PizzaBoyGba or EmulatorKind.PizzaBoyGbc => ["save", "saves"],
+            EmulatorKind.RomFolder => [],
             _ => ["saves"],
         };
         var savesDirs = rootChildren.Where(x => x.IsDirectory && preferredFolders.Contains(x.Name, StringComparer.OrdinalIgnoreCase)).ToArray();
@@ -247,6 +251,153 @@ public sealed class EmulatorTreeScanner<TNode>(
 
     private static bool IsEdenDirectChild(string name) => name is "account" or "0000000000000000";
 
+    private List<DetectedSave> ScanRyujinx(TNode root, CancellationToken cancellationToken,
+        ScanState state, Action<DetectedSave>? onSave)
+    {
+        var rootName = tree.RootName(root);
+        TNode? userSaveDir = null;
+        Dictionary<ulong, ulong> imkvdbMap = [];
+
+        string[][] imkvdbPaths =
+        [
+            ["bis", "system", "save", "8000000000000000", "0"],
+            ["system", "save", "8000000000000000", "0"],
+            ["8000000000000000", "0"]
+        ];
+        foreach (var path in imkvdbPaths)
+        {
+            var dir = NavigatePath(root, path, state.Trace);
+            if (dir is not null)
+            {
+                var arcFile = tree.List(dir).FirstOrDefault(x => !x.IsDirectory && string.Equals(x.Name, "imkvdb.arc", StringComparison.OrdinalIgnoreCase));
+                if (arcFile.Node is not null)
+                {
+                    state.Trace($"Found imkvdb.arc at {tree.DocumentId(arcFile.Node)}");
+                    imkvdbMap = ReadImkvdb(arcFile.Node, state);
+                    break;
+                }
+            }
+        }
+
+        if (string.Equals(rootName, "save", StringComparison.OrdinalIgnoreCase))
+        {
+            state.Trace($"Ryujinx root grant recognized by root name '{rootName}'");
+            userSaveDir = root;
+        }
+        else
+        {
+            string[][] userSavePaths =
+            [
+                ["bis", "user", "save"],
+                ["user", "save"],
+                ["save"]
+            ];
+            foreach (var path in userSavePaths)
+            {
+                state.Trace($"Trying Ryujinx save prefix {string.Join('/', path)}");
+                userSaveDir = NavigatePath(root, path, state.Trace);
+                if (userSaveDir is not null)
+                {
+                    state.Trace($"User save root found via prefix {string.Join('/', path)}");
+                    break;
+                }
+            }
+        }
+
+        userSaveDir ??= root;
+
+        var results = new List<DetectedSave>();
+        FindFilesRecursive(userSaveDir, EdenMaxDepth, cancellationToken, child =>
+        {
+            state.FilesSeen++;
+            var pathLike = tree.PathLike(child.Node);
+            if (!IsRyujinxCommittedSave(pathLike))
+            {
+                state.Trace($"SKIP file name={child.Name} docId={tree.DocumentId(child.Node)}");
+                return;
+            }
+
+            state.Trace($"CANDIDATE name={child.Name} modified={child.LastModified?.ToString("O") ?? "unknown"} docId={tree.DocumentId(child.Node)}");
+            var label = ResolveRyujinxGameLabel(pathLike, imkvdbMap);
+            if (TryDetect(child, EmulatorKind.Ryujinx, label, state) is { } save)
+            {
+                results.Add(save);
+                onSave?.Invoke(save);
+            }
+            else
+                state.Rejected.Add(child.Name);
+        }, state, diagnostic: true);
+
+        return results;
+    }
+
+    /// <summary>
+    /// Title ids only improve labels: an oversized, unreadable or corrupt index leaves the saves
+    /// unlabelled rather than unscanned.
+    /// </summary>
+    private Dictionary<ulong, ulong> ReadImkvdb(TNode arcFile, ScanState state)
+    {
+        try
+        {
+            using var stream = tree.OpenRead(arcFile);
+            if (stream is null)
+            {
+                state.Trace("imkvdb.arc could not be opened");
+                return [];
+            }
+            var buffer = new byte[MaxImkvdbBytes + 1];
+            var length = stream.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
+            if (length > MaxImkvdbBytes)
+            {
+                state.Trace($"imkvdb.arc ignored: larger than {MaxImkvdbBytes} bytes");
+                return [];
+            }
+            var map = RyujinxImkvdbParser.Parse(buffer.AsSpan(0, length));
+            state.Trace($"Parsed {map.Count} entries from imkvdb.arc");
+            return map;
+        }
+        catch (Exception error)
+        {
+            state.Trace($"imkvdb.arc unreadable: {error.Message}");
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Only &lt;SaveDataId&gt;/0/{main, SaveData.bin, savedata.bin}: /0 is the committed copy,
+    /// while /1 is a working copy Ryujinx rebuilds from /0, so edits made there are lost.
+    /// </summary>
+    private static bool IsRyujinxCommittedSave(string pathLike)
+    {
+        var parts = pathLike.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 3
+            && (parts[^1] is "main" or "SaveData.bin" or "savedata.bin")
+            && parts[^2] == "0"
+            && IsSaveDataId(parts[^3]);
+    }
+
+    private static bool IsSaveDataId(string name) =>
+        name.Length == 16 && ulong.TryParse(name, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out _);
+
+    private static string ResolveRyujinxGameLabel(string pathLike, Dictionary<ulong, ulong> imkvdbMap)
+    {
+        var parts = pathLike.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        // Typical structure: .../<SaveDataId:x16>/0/main
+        for (var i = parts.Length - 2; i >= 0; i--)
+        {
+            if (parts[i].Length == 16 && ulong.TryParse(parts[i], System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var saveId))
+            {
+                if (imkvdbMap.TryGetValue(saveId, out var programId))
+                {
+                    var guessed = EmulatorSaveHeuristics.GuessSwitchGameLabel("/" + programId.ToString("X16") + "/main");
+                    if (guessed != "Switch save") return guessed;
+                }
+            }
+        }
+
+        return EmulatorSaveHeuristics.GuessSwitchGameLabel(pathLike);
+    }
+
     /// <summary>
     /// Citra-family 3DS (Azahar, Lime3DS, Citra MMJ): sdmc/Nintendo 3DS/&lt;ID0&gt;/&lt;ID1&gt;/title/00040000/&lt;game&gt;/data/00000001/(main | sav.dat),
     /// with the root resolved from whichever level the user granted (see <see cref="ThreeDsSaveLayout"/>).
@@ -298,9 +449,9 @@ public sealed class EmulatorTreeScanner<TNode>(
             state.Trace($"DocumentId={docId}");
 
             // A file already parsed at this modification time never gets re-read: rescans
-            // are instant. The install epoch in the key makes each fresh APK re-read every
-            // file exactly once, so detection improvements (new romhack labels, say) reach
-            // saves whose timestamps have not changed since the previous install.
+            // are instant. The install epoch in the key makes each fresh APK (or desktop build)
+            // re-read every file exactly once, so detection improvements (new romhack labels,
+            // say) reach saves whose timestamps have not changed since the previous install.
             var cacheKey = docId + "#" + kind + "#" + _buildEpoch;
             var modifiedTicks = child.LastModified?.UtcTicks ?? 0;
             if (TryGetCached(cacheKey, modifiedTicks, out var cached))

@@ -15,9 +15,8 @@ public sealed record PadOption(string Label, string? Glyph = null, Color? Accent
 
 public sealed class PadMenu : IPadHandler
 {
-    private readonly TaskCompletionSource<string?> _result = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource<int?> _result = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly List<DsFolderButton> _optionViews = [];
-    private readonly PadOption[] _options;
     private readonly Grid _host;
     private readonly Grid _overlay;
     private readonly GamepadRouter? _router;
@@ -27,11 +26,22 @@ public sealed class PadMenu : IPadHandler
 
     /// <summary>Shows the menu inside <paramref name="host"/> (a page's root grid) and returns the chosen option or null.</summary>
     public static Task<string?> ShowAsync(Grid host, string title, string? message, params string[] options) =>
-        new PadMenu(host, title, message, options.Select(o => new PadOption(o)).ToArray())._result.Task;
+        ShowAsync(host, title, message, 0, options.Select(o => new PadOption(o)).ToArray());
 
     /// <summary>Rich overload: options with glyph badges, accent colors, or image icons.</summary>
     public static Task<string?> ShowAsync(Grid host, string title, string? message, params PadOption[] options) =>
-        new PadMenu(host, title, message, options)._result.Task;
+        ShowAsync(host, title, message, 0, options);
+
+    /// <summary>Rich overload that opens with the cursor on <paramref name="selectedIndex"/> (clamped to the options), such as the current setting.</summary>
+    public static async Task<string?> ShowAsync(Grid host, string title, string? message, int selectedIndex, params PadOption[] options) =>
+        await ShowIndexAsync(host, title, message, selectedIndex, options).ConfigureAwait(false) is { } chosen ? options[chosen].Label : null;
+
+    /// <summary>
+    /// Like the rich overloads, but returns the chosen option's index, or null when cancelled:
+    /// for menus whose labels can repeat, where a label cannot say which entry was picked.
+    /// </summary>
+    public static Task<int?> ShowIndexAsync(Grid host, string title, string? message, int selectedIndex, params PadOption[] options) =>
+        new PadMenu(host, title, message, options, selectedIndex)._result.Task;
 
     /// <summary>Two-option confirm box; true when the user picks <paramref name="confirmLabel"/>.</summary>
     public static async Task<bool> ConfirmAsync(Grid host, string title, string message, string confirmLabel = "OK")
@@ -40,11 +50,10 @@ public sealed class PadMenu : IPadHandler
         return choice == confirmLabel;
     }
 
-    private PadMenu(Grid host, string title, string? message, PadOption[] options)
+    private PadMenu(Grid host, string title, string? message, PadOption[] options, int selectedIndex = 0)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
         _host = host;
-        _options = options;
         _router = IPlatformApplication.Current?.Services.GetService<GamepadRouter>();
 
         // Menus columnize by what the labels need: the longest label decides how many
@@ -65,7 +74,7 @@ public sealed class PadMenu : IPadHandler
 
         for (var i = 0; i < options.Length; i++)
         {
-            var captured = options[i].Label;
+            var captured = i;
             var button = new DsFolderButton(options[i], buttonHeight) { Tapped = () => Close(captured) };
             _optionViews.Add(button);
             grid.Add(button);
@@ -119,7 +128,7 @@ public sealed class PadMenu : IPadHandler
         // The window caps itself to the host (host.Height - 16).
         var window = Kit.OverlayWindow(host, body, preferredMaxWidth: 640, scroll: false);
         _overlay = Kit.AttachOverlay(host, window, () => Close(null));
-        Highlight(0);
+        Highlight(selectedIndex);
         _router?.Push(this);
         PerfTrace.Log($"menu.open[{options.Length}]", watch);
         PerfTrace.UntilIdle($"menu.open[{options.Length}]", host.Dispatcher);
@@ -133,7 +142,7 @@ public sealed class PadMenu : IPadHandler
             case PadButton.Down: Highlight(_index + _columns); return true;
             case PadButton.Left: Highlight(_index - 1); return true;
             case PadButton.Right: Highlight(_index + 1); return true;
-            case PadButton.A: Close(_options[_index].Label); return true;
+            case PadButton.A: Close(_index); return true;
             case PadButton.B: Close(null); return true;
             default: return true; // the menu owns the pad while open
         }
@@ -150,7 +159,7 @@ public sealed class PadMenu : IPadHandler
         // below the fold.
         _scroll?.ScrollToAsync(_optionViews[_index], ScrollToPosition.MakeVisible, animated: false);
     }
-    private void Close(string? result)
+    private void Close(int? result)
     {
         if (_router is not null) _router.Remove(this);
         _host.Remove(_overlay);
