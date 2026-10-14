@@ -170,6 +170,7 @@ public static class BoxGridRenderer
         StoragePaint.WellPanel(canvas, well, unit);
         backdrop?.Invoke(canvas, well, unit);
         var bdspStyle = scene.BdspStyle;
+        var home = HomeRender.Active;
         var marking = scene.Marking;
         var lockedSlots = scene.Locked;
 
@@ -200,12 +201,12 @@ public static class BoxGridRenderer
                 {
                     // The lifted Pokémon leaves a faded ghost behind.
                     canvas.SaveLayer(GhostPaint);
-                    DrawStanding(canvas, cell, unit, 0f, slots[index], sprites, invalidate, ink, bdspStyle);
+                    DrawStanding(canvas, cell, unit, 0f, slots[index], sprites, invalidate, ink, bdspStyle, home);
                     canvas.Restore();
                 }
                 else
                 {
-                    DrawStanding(canvas, cell, unit, lift, slots[index], sprites, invalidate, ink, bdspStyle);
+                    DrawStanding(canvas, cell, unit, lift, slots[index], sprites, invalidate, ink, bdspStyle, home);
                 }
             }
 
@@ -213,7 +214,7 @@ public static class BoxGridRenderer
                 PksmPaint.RangeWash(canvas, SKRect.Inflate(cell, -4f * unit, -4f * unit), mark);
 
             if (selected && hand is null && scene.Carried is { } carried)
-                DrawStanding(canvas, cell, unit, layout.CellHeight * 0.18f, carried, sprites, invalidate, ink, bdspStyle);
+                DrawStanding(canvas, cell, unit, layout.CellHeight * 0.18f, carried, sprites, invalidate, ink, bdspStyle, home);
 
             if (occupied && !isCarryOrigin && slots[index].IsShiny)
                 StoragePaint.ShinyStar(canvas, cell, star, unit);
@@ -242,7 +243,7 @@ public static class BoxGridRenderer
             hand.Sync(carrying, origin, cursor, scene.Selected, scene.Box);
             var held = scene.Carried;
             if (hand.Draw(canvas, layout.CellHeight,
-                    (c, r) => { if (held is not null) DrawStanding(c, r, unit, 0f, held, sprites, invalidate, ink, bdspStyle); },
+                    (c, r) => { if (held is not null) DrawStanding(c, r, unit, 0f, held, sprites, invalidate, ink, bdspStyle, home); },
                     (c, r) => StoragePaint.Pointer(c, r, unit, marking)))
                 invalidate();
             if (hand.Holding) return;
@@ -260,17 +261,31 @@ public static class BoxGridRenderer
     // to it. Found once per icon; UI thread only.
     private static readonly Dictionary<SKRectI, SKRectI> IconFootprints = [];
 
+    // A HOME render's square, as a share of the cell's height, and how far its feet sit above the cell's bottom.
+    private const float HomeFill = 0.86f;
+    private const float HomeGround = 10f;
+
     /// <summary>
     /// Draws one Pokémon standing on the cell's ground line, <paramref name="lift"/> pixels up.
-    /// Order: the BDSP add-on icon (BDSP saves), the Showdown icon (a shiny wears PKHeX's shiny
-    /// art at the icon's size, or keeps the icon when no shiny art exists), then PKHeX's art for
-    /// eggs and forms Showdown does not draw. While an answer is loading nothing is drawn, so no
-    /// stand-in flashes first.
+    /// Order: the HOME render when <paramref name="home"/> is on, the BDSP add-on icon (BDSP
+    /// saves), the Showdown icon (a shiny wears PKHeX's shiny art at the icon's size, or keeps the
+    /// icon when no shiny art exists), then PKHeX's art for eggs and forms Showdown does not draw.
+    /// While an answer is loading nothing is drawn, so no stand-in flashes first.
     /// </summary>
     private static void DrawStanding(SKCanvas canvas, SKRect cell, float unit, float lift, Domain.SlotSummary slot,
-        ISpriteService sprites, Action invalidate, Ink ink, bool bdspStyle)
+        ISpriteService sprites, Action invalidate, Ink ink, bool bdspStyle, bool home)
     {
         var look = slot.Look;
+        if (home && !slot.IsEgg)
+        {
+            var homeBox = Math.Min(cell.Width, cell.Height) * HomeFill;
+            if (!HomeRender.TryGet(canvas, sprites, look, homeBox, invalidate, out var render)) return;
+            if (render is not null)
+            {
+                HomeRender.DrawStanding(canvas, render, homeBox, cell.MidX, cell.Bottom - HomeGround * unit - lift);
+                return;
+            }
+        }
         if (bdspStyle)
         {
             if (!sprites.TryGetBdspIcon(look, invalidate, out var icon)) return;

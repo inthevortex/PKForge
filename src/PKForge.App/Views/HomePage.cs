@@ -825,6 +825,7 @@ public sealed class HomePage : ContentPage, IPadHandler
         if (hiddenCount > 0) options.Add(new PadOption(hiddenOption, IconPath: "show", Detail: "Saves you hid from Home. Pick one to show it again."));
         var scheme = $"Color scheme: {PKForge.Chrome.ColorTheme.Current.Name}";
         var background = $"Box background: {BoxBackground.Name(BoxBackground.Style)}";
+        var art = $"Pokémon art: {SpriteStyleSetting.Name(SpriteStyleSetting.Current)}";
         options.AddRange(
         [
             new PadOption(scheme, IconPath: "palette", Detail: "The app's colors: the default blues or a theme for each type."),
@@ -834,6 +835,8 @@ public sealed class HomePage : ContentPage, IPadHandler
         var uiSize = $"UI size: {Platforms.Desktop.UiSizeSetting.Current}";
         options.Add(new PadOption(uiSize, IconPath: "search", Detail: "How large text and controls are drawn in the window."));
 #endif
+        if (SpriteStyleSetting.Offered)
+            options.Add(new PadOption(art, IconPath: "pokedex", Detail: "HOME renders from the sprite pack, or the games' pixel sprites."));
         options.AddRange(
         [
             new PadOption("Restore points", IconPath: "history", Detail: "The backups made before each write, to put a save back as it was."),
@@ -847,6 +850,7 @@ public sealed class HomePage : ContentPage, IPadHandler
         if (choice == hiddenOption) { await ShowHiddenSavesAsync(); return; }
         if (choice == scheme) { await ShowColorSchemeAsync(); return; }
         if (choice == background) { await ShowBoxBackgroundAsync(); return; }
+        if (choice == art && SpriteStyleSetting.Offered) { await ShowSpriteStyleAsync(); return; }
 #if PKFORGE_DESKTOP
         if (choice == uiSize) { await ShowUiSizeAsync(); return; }
 #endif
@@ -1169,6 +1173,27 @@ public sealed class HomePage : ContentPage, IPadHandler
         }
     }
 
+    /// <summary>Which art the boxes, the party and the summary draw Pokémon with.</summary>
+    private async Task ShowSpriteStyleAsync()
+    {
+        using var flow = BeginFlow();
+        var home = SpriteStyleSetting.Name(SpriteStyle.Home);
+        var pixel = SpriteStyleSetting.Name(SpriteStyle.Pixel);
+        var picked = await PadMenu.ShowAsync(_hostGrid, "Pokémon art", null,
+            new PadOption(home, IconPath: "pokedex", Detail: "Pokémon HOME's sharp, high-resolution pictures, from the sprite pack."),
+            new PadOption(pixel, IconPath: "box", Detail: "The games' own pixel sprites and box icons."));
+        if (picked != home && picked != pixel) return;
+        var style = picked == home ? SpriteStyle.Home : SpriteStyle.Pixel;
+        SpriteStyleSetting.Set(style);
+        AppLog.Info("sprites", $"Player picked {style} art");
+        _viewModel.Status = $"Pokémon art: {picked}.";
+        if (style == SpriteStyle.Home && !SpritePackDownloader.MainPackInstalled
+            && await PadMenu.ConfirmAsync(_hostGrid, "Download the sprite pack?",
+                $"HOME renders come with the sprite pack ({SpritePackDownloader.SizeHint}). Without it, each one downloads the first time it is shown, and the pixel sprite stands in while offline.",
+                "Download"))
+            await DownloadSpritePackAsync();
+    }
+
     /// <summary>The color scheme picker; a new scheme rebuilds Home and the lower screen in its colors.</summary>
     private async Task ShowColorSchemeAsync()
     {
@@ -1387,7 +1412,9 @@ public sealed class HomePage : ContentPage, IPadHandler
         switch (result.Status)
         {
             case SpritePackStatus.Complete:
-                _viewModel.Status = "Sprite pack complete - fully offline now.";
+                _viewModel.Status = SpriteStyleSetting.Offered && SpriteStyleSetting.Current == SpriteStyle.Home
+                    ? "Sprite pack complete - HOME renders are on, fully offline."
+                    : "Sprite pack complete - fully offline now.";
                 break;
             case SpritePackStatus.Offline:
                 await PadMenu.ShowAsync(_hostGrid, "Sprite pack",

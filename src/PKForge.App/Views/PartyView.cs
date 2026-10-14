@@ -225,21 +225,32 @@ public static class PartyView
 
         // The box sprite in the panel's top-left corner, the status tag under it.
         var spriteArea = SKRect.Create(r.Left + 14 * unit, r.Top + 4 * unit, 100 * unit, 88 * unit);
-        var bitmap = sprites.GetSprite(detail!.Look);
-        if (bitmap is not null)
+        var look = detail!.Look;
+        SKImage? render = null;
+        // While a HOME render is on its way nothing is drawn, so no pixel sprite flashes first.
+        var homePending = HomeRender.Active && !HomeRender.TryGet(canvas, sprites, look, spriteArea.Height, invalidate, out render);
+        using var tint = new SKPaint();
+        if (fainted) tint.ColorFilter = SKColorFilter.CreateBlendMode(new SKColor(0x70, 0x50, 0x48), SKBlendMode.SrcIn);
+        if (render is not null)
         {
-            var scale = MathF.Max(1f, MathF.Floor(MathF.Min(spriteArea.Width / bitmap.Width, spriteArea.Height / bitmap.Height) * 2f) / 2f);
-            var w = bitmap.Width * scale;
-            var h = bitmap.Height * scale;
-            using var paint = new SKPaint();
-            if (fainted) paint.ColorFilter = SKColorFilter.CreateBlendMode(new SKColor(0x70, 0x50, 0x48), SKBlendMode.SrcIn);
-            using var image = SKImage.FromBitmap(bitmap);
-            canvas.DrawImage(image, new SKRect(spriteArea.MidX - w / 2, spriteArea.Bottom - h, spriteArea.MidX + w / 2, spriteArea.Bottom),
-                new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None), paint);
+            HomeRender.DrawStanding(canvas, render, spriteArea.Height, spriteArea.MidX, spriteArea.Bottom, tint);
         }
-        else
+        else if (!homePending)
         {
-            sprites.Warm(detail.Look, invalidate);
+            var bitmap = sprites.GetSprite(look);
+            if (bitmap is not null)
+            {
+                var scale = MathF.Max(1f, MathF.Floor(MathF.Min(spriteArea.Width / bitmap.Width, spriteArea.Height / bitmap.Height) * 2f) / 2f);
+                var w = bitmap.Width * scale;
+                var h = bitmap.Height * scale;
+                using var image = SKImage.FromBitmap(bitmap);
+                canvas.DrawImage(image, new SKRect(spriteArea.MidX - w / 2, spriteArea.Bottom - h, spriteArea.MidX + w / 2, spriteArea.Bottom),
+                    new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None), tint);
+            }
+            else
+            {
+                sprites.Warm(look, invalidate);
+            }
         }
         if (detail.IsShiny)
             DrawShinyStar(canvas, new SKPoint(spriteArea.Right - 6 * unit, r.Top + 22 * unit), 11 * unit);

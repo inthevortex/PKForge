@@ -1842,13 +1842,23 @@ public sealed class BankPage : ContentPage, IPadPagingHandler
         using (var rim = new SKPaint { Color = PksmPaint.Mix(glow, SKColors.White, 0.3f).WithAlpha(200), IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 3 })
             canvas.DrawRoundRect(SKRect.Inflate(card, -1.5f, -1.5f), 22, 22, rim);
 
+        var side = Math.Min(card.Width, card.Height) - 24;
+        if (SpriteStyleSetting.Offered)
+        {
+            // Prepared off the UI thread at the size the zoomed window shows it.
+            if (!HomeRender.TryGet(canvas, _sprites, look, side, _frame.Request, out var render)) return;
+            if (render is not null)
+            {
+                HomeRender.DrawCentered(canvas, render, side, card.MidX, card.MidY);
+                return;
+            }
+        }
         var home = _sprites.GetHome(look);
         if (home is null) _sprites.WarmHome(look, _frame.Request);
         var standIn = home is null && _sprites.HomeUnavailable(look);
         var picture = home ?? (standIn ? _sprites.GetSprite(look) : null);
         if (standIn && picture is null) _sprites.Warm(look, _frame.Request);
         if (picture is null) return;
-        var side = Math.Min(card.Width, card.Height) - 24;
         var scale = side / Math.Max(picture.Width, picture.Height);
         var w = picture.Width * scale;
         var h = picture.Height * scale;

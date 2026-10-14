@@ -63,6 +63,11 @@ public sealed class SpritePackDownloader(ISpriteService sprites, IGameDataServic
         new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, SpritePackArchiveInstaller.FreeSpace, TimeSpan.FromSeconds(30),
         ItemArt.NoteUnpacked);
 
+    private static bool? _mainPackInstalled;
+
+    /// <summary>True once the main pack is on this device; checked once, then kept until a download changes it.</summary>
+    public static bool MainPackInstalled => _mainPackInstalled ??= File.Exists(Main.DoneMarker(FileSystem.AppDataDirectory));
+
     /// <summary>How many pack files this device still lacks; 0 once the pack is complete.</summary>
     public int CountMissing()
     {
@@ -91,32 +96,39 @@ public sealed class SpritePackDownloader(ISpriteService sprites, IGameDataServic
             return new SpritePackResult(SpritePackStatus.Offline);
 
         var root = FileSystem.AppDataDirectory;
-        var spriteEntries = SpritePack.Entries([]);
-        var missing = spriteEntries.Count(e => !File.Exists(Path.Combine(root, e.CachePath))) + WantedItems(root).Count;
-        if (missing >= ArchiveThreshold)
+        try
         {
-            var archive = await Installer.InstallAsync(root, Main, onProgress, cancellationToken).ConfigureAwait(false);
-            switch (archive.Outcome)
+            var spriteEntries = SpritePack.Entries([]);
+            var missing = spriteEntries.Count(e => !File.Exists(Path.Combine(root, e.CachePath))) + WantedItems(root).Count;
+            if (missing >= ArchiveThreshold)
             {
-                case ArchiveOutcome.NoSpace:
-                    return new SpritePackResult(SpritePackStatus.NoSpace, SpaceNeeded: archive.SpaceNeeded, SpaceFree: archive.SpaceFree);
-                case ArchiveOutcome.Interrupted:
-                    return new SpritePackResult(SpritePackStatus.Interrupted);
+                var archive = await Installer.InstallAsync(root, Main, onProgress, cancellationToken).ConfigureAwait(false);
+                switch (archive.Outcome)
+                {
+                    case ArchiveOutcome.NoSpace:
+                        return new SpritePackResult(SpritePackStatus.NoSpace, SpaceNeeded: archive.SpaceNeeded, SpaceFree: archive.SpaceFree);
+                    case ArchiveOutcome.Interrupted:
+                        return new SpritePackResult(SpritePackStatus.Interrupted);
+                }
             }
+
+            var itemFailures = await DownloadMissingAsync(root, spriteEntries, WantedItems(root), onProgress, cancellationToken).ConfigureAwait(false);
+            await FetchAddOnsAsync(root, onProgress, cancellationToken).ConfigureAwait(false);
+
+            // Every sprite in place, file by file or from the archive, counts as the pack once no
+            // item icon failed for a reason other than being absent upstream; until then the
+            // failed icons stay counted as missing and the next run fetches them again.
+            if (ItemIconMisses.PackCanBeMarkedComplete(itemFailures, spriteEntries.All(e => File.Exists(Path.Combine(root, e.CachePath))))
+                && !File.Exists(Main.DoneMarker(root)))
+                await File.WriteAllTextAsync(Main.DoneMarker(root), Main.Url, cancellationToken).ConfigureAwait(false);
+
+            var left = CountMissing();
+            return left == 0 ? new SpritePackResult(SpritePackStatus.Complete) : new SpritePackResult(SpritePackStatus.Incomplete, left);
         }
-
-        var itemFailures = await DownloadMissingAsync(root, spriteEntries, WantedItems(root), onProgress, cancellationToken).ConfigureAwait(false);
-        await FetchAddOnsAsync(root, onProgress, cancellationToken).ConfigureAwait(false);
-
-        // Every sprite in place, file by file or from the archive, counts as the pack once no
-        // item icon failed for a reason other than being absent upstream; until then the
-        // failed icons stay counted as missing and the next run fetches them again.
-        if (ItemIconMisses.PackCanBeMarkedComplete(itemFailures, spriteEntries.All(e => File.Exists(Path.Combine(root, e.CachePath))))
-            && !File.Exists(Main.DoneMarker(root)))
-            await File.WriteAllTextAsync(Main.DoneMarker(root), Main.Url, cancellationToken).ConfigureAwait(false);
-
-        var left = CountMissing();
-        return left == 0 ? new SpritePackResult(SpritePackStatus.Complete) : new SpritePackResult(SpritePackStatus.Incomplete, left);
+        finally
+        {
+            _mainPackInstalled = null;
+        }
     }
 
     // One add-on download at a time: the quiet one and a full download share archive files.

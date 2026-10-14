@@ -145,10 +145,13 @@ public static class EditorPaint
         Centered(c, title, cx, cy, font, ChipInk);
     }
 
+    /// <summary>The long side of the watermark at unit 1.</summary>
+    public const float WatermarkSide = 10f * 56f * 1.15f;
+
     /// <summary>The Pokémon as a faint oversized watermark in the panel's lower right.</summary>
     public static void PaintWatermark(SKCanvas c, SKRect panel, SKImage sprite, float unit, SKSamplingOptions sampling)
     {
-        var scale = 10f * unit * 56f / Math.Max(sprite.Width, sprite.Height) * 1.15f;
+        var scale = WatermarkSide * unit / Math.Max(sprite.Width, sprite.Height);
         var w = sprite.Width * scale;
         var h = sprite.Height * scale;
         var dest = new SKRect(panel.Right - w + 40f * unit, panel.Bottom - h + 10f * unit, panel.Right + 40f * unit, panel.Bottom + 10f * unit);

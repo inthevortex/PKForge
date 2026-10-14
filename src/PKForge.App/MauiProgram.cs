@@ -85,6 +85,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IEvolutionService, EvolutionService>();
         builder.Services.AddSingleton<ISpriteService>(sp =>
         {
+            _ = Task.Run(SpriteService.SweepStaleDownloads);
             _ = Task.Run(ItemArt.WarmIconCache);
             return new SpriteService();
         });

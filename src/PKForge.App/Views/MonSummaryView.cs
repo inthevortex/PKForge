@@ -434,8 +434,9 @@ public sealed class MonSummaryView : ContentView
     }
 
     /// <summary>
-    /// Showdown's static front sprite for the exact form (shiny when shiny), trimmed and
-    /// scaled by a whole number so its pixels stay square; PKHeX's art when Showdown has none.
+    /// The HOME render when <see cref="HomeRender.Active"/>; otherwise, or when HOME has none,
+    /// Showdown's static front sprite for the exact form (shiny when shiny), trimmed and scaled
+    /// by a whole number so its pixels stay square; PKHeX's art when Showdown has none.
     /// </summary>
     private void PaintPokemon(SKCanvas c, float cx, float cy, MonSummary s)
     {
@@ -451,6 +452,16 @@ public sealed class MonSummaryView : ContentView
             c.DrawCircle(egg.MidX - eh * 0.12f, egg.MidY - eh * 0.12f, eh * 0.08f, spot);
             c.DrawCircle(egg.MidX + eh * 0.14f, egg.MidY + eh * 0.08f, eh * 0.1f, spot);
             return;
+        }
+        if (HomeRender.Active)
+        {
+            const float box = 460f;
+            if (!HomeRender.TryGet(c, _sprites, s.Look, box, Redraw, out var render)) return;
+            if (render is not null)
+            {
+                HomeRender.DrawCentered(c, render, box, cx, cy);
+                return;
+            }
         }
         if (!_sprites.TryGetShowdownFront(s.Look, Redraw, out var sprite)) return;
         if (sprite is null)

@@ -71,6 +71,15 @@ public sealed partial class BoxBrowserPage
         StoragePaint.WellPanel(canvas, bounds, unit);
         if (EditedLook() is not { } look) return;
         void Redraw() => MainThread.BeginInvokeOnMainThread(() => _editorBackdrop?.InvalidateSurface());
+        if (HomeRender.Active)
+        {
+            if (!HomeRender.TryGet(canvas, _sprites, look, EditorPaint.WatermarkSide * unit, Redraw, out var render)) return;
+            if (render is not null)
+            {
+                EditorPaint.PaintWatermark(canvas, bounds, render, unit, HomeRender.Smooth);
+                return;
+            }
+        }
         // The Gen 5 front, as on the summary; the box sprite only when Showdown has none.
         if (!_sprites.TryGetShowdownFront(look, Redraw, out var sprite)) return;
         sprite ??= _sprites.GetSprite(look);
