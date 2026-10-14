@@ -971,9 +971,10 @@ public sealed class HomePage : ContentPage, IPadHandler
         if (automatic && !_isAppearing)
             return;
 
-        var choice = await DialogueChoiceBox.ShowAsync(_hostGrid,
-            $"A new version of PKForge is available! Version {update.Version} is ready to install. Would you like to update now?",
-            "YES", "NO", "DON'T REMIND ME");
+        var offer = _appPlatform.CanSelfInstallUpdates
+            ? $"A new version of PKForge is available! Version {update.Version} is ready to install. Would you like to update now?"
+            : $"A new version of PKForge is available! Version {update.Version} is out. Would you like to open its release page?";
+        var choice = await DialogueChoiceBox.ShowAsync(_hostGrid, offer, "YES", "NO", "DON'T REMIND ME");
         switch (choice)
         {
             case "YES":
@@ -993,6 +994,11 @@ public sealed class HomePage : ContentPage, IPadHandler
     {
         using var flow = BeginFlow();
         var service = IPlatformApplication.Current!.Services.GetRequiredService<AppUpdateService>();
+        if (!_appPlatform.CanSelfInstallUpdates)
+        {
+            await OpenReleasePageAsync(service, update);
+            return;
+        }
         var overlay = LoadingOverlay.Show(_hostGrid, "Downloading the update!",
             $"PKForge {update.Version} is on its way. Android will confirm the installation.");
         AppUpdateInstallResult result;
@@ -1052,6 +1058,31 @@ public sealed class HomePage : ContentPage, IPadHandler
         }
     }
 
+    /// <summary>Where the app cannot install its own updates, the installer opens the release page instead.</summary>
+    private async Task OpenReleasePageAsync(AppUpdateService service, AvailableAppUpdate update)
+    {
+        string reason;
+        try
+        {
+            var result = await service.DownloadAndInstallAsync(update, (_, _) => { }, CancellationToken.None);
+            if (result != AppUpdateInstallResult.ReleasePageNotOpened)
+            {
+                _viewModel.Status = "The PKForge release page is open.";
+                return;
+            }
+            AppLog.Warn("update", "No program opened the release page");
+            reason = "no program to open web links was found";
+        }
+        catch (Exception error)
+        {
+            AppLog.Error("update", "Opening the release page failed", error);
+            reason = error.Message;
+        }
+        await PadMenu.ShowAsync(_hostGrid, "Release page",
+            $"The release page could not be opened ({reason}). PKForge {update.Version} is at {update.ReleaseUrl}", "OK");
+    }
+
+#if ANDROID
     private async Task ReportInstallFailureAsync(AvailableAppUpdate update, string reason)
     {
         using var flow = BeginFlow();
@@ -1061,6 +1092,7 @@ public sealed class HomePage : ContentPage, IPadHandler
         if (openRelease)
             await Launcher.OpenAsync(update.ReleaseUrl);
     }
+#endif
 
     /// <summary>Background music: library, play/pause, skip, order, autostart.</summary>
     private async Task ShowMusicAsync()

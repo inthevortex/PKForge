@@ -129,6 +129,7 @@ public static class MauiProgram
             dispatchToUi: action => Avalonia.Threading.Dispatcher.UIThread.Post(action)
         ));
         builder.Services.AddSingleton<ISaveFileAccess, Platforms.Desktop.PosixSaveFileAccess>();
+        builder.Services.AddSingleton<IMusicPlayer, Platforms.Desktop.SdlMixerMusicPlayer>();
         builder.Services.AddSingleton<IDocumentPicker, Platforms.Desktop.DesktopDocumentPicker>();
         builder.Services.AddSingleton<ISecondaryDisplayHost, Platforms.Desktop.NullSecondaryDisplayHost>();
         builder.Services.AddSingleton<IFolderPicker, Platforms.Desktop.DesktopFolderPicker>();
@@ -138,6 +139,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IIncrementalEmulatorDetectionService>(sp => sp.GetRequiredService<Platforms.Desktop.DesktopEmulatorScanner>());
         builder.Services.AddSingleton<IEmulatorRootDiscovery, LinuxEmulatorRootDiscovery>();
         builder.Services.AddSingleton<IAppPlatform, Platforms.Desktop.DesktopAppPlatform>();
+        builder.Services.AddSingleton<IUpdateInstaller, Platforms.Desktop.DesktopUpdateInstaller>();
 
         var desktopDisplay = new Platforms.Desktop.DesktopDeviceDisplay();
         builder.Services.AddSingleton<Microsoft.Maui.Devices.IDeviceDisplay>(desktopDisplay);

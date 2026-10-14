@@ -6,6 +6,8 @@ namespace PKForge.App.Platforms.Android;
 
 public sealed class AndroidAppPlatform : IAppPlatform
 {
+    public bool CanSelfInstallUpdates => true;
+
     public async Task ExportFilesAsync(string title, IReadOnlyList<string> paths)
     {
         if (paths.Count == 0) return;

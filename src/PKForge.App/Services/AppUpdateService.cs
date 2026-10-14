@@ -25,11 +25,20 @@ public sealed class AppUpdateService
     public static void OpenInstallPermissionSettings() =>
         IPlatformApplication.Current?.Services.GetService<IUpdateInstaller>()?.OpenInstallPermissionSettings();
 
-    public Task<AppUpdateCheck> CheckAsync(CancellationToken cancellationToken = default) =>
-        _checker.CheckAsync(
+    public Task<AppUpdateCheck> CheckAsync(CancellationToken cancellationToken = default)
+    {
+#if ANDROID
+        return _checker.CheckAsync(
             name => name.EndsWith(".apk", StringComparison.OrdinalIgnoreCase),
             "The latest release did not include an APK.",
             cancellationToken);
+#else
+        return _checker.CheckAsync(
+            name => name.EndsWith("-linux-x64.tar.gz", StringComparison.OrdinalIgnoreCase),
+            "The latest release did not include a Linux build (-linux-x64.tar.gz).",
+            cancellationToken);
+#endif
+    }
 
     public bool ShouldPromptAutomatically(AvailableAppUpdate update) =>
         AppUpdateRules.ShouldPromptAutomatically(AppInfo.Current.VersionString, update.Version, SkippedVersion);

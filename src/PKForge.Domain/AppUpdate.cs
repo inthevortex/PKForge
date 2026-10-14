@@ -18,6 +18,9 @@ public enum AppUpdateInstallResult
     InstallerOpened,
     InstallPermissionRequired,
     ReleasePageOpened,
+
+    /// <summary>The release page could not be opened, for example because no program opens web links.</summary>
+    ReleasePageNotOpened,
 }
 
 /// <summary>The latest release has no package for this platform: an expected answer, not a fault.</summary>

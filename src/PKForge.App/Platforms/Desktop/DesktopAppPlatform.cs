@@ -25,6 +25,8 @@ public sealed class DesktopAppPlatform : IAppPlatform
         }
     }
 
+    public bool CanSelfInstallUpdates => false;
+
     /// <summary>Where haptics go once the gamepad source runs; it decides whether a pad rumbles.</summary>
     internal Action<HapticKind>? HapticSink { get; set; }
 

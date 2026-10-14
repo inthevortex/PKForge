@@ -11,6 +11,7 @@ public static class Program
 {
     private static KeyboardSource? _keyboardSource;
     private static SdlGamepadSource? _gamepadSource;
+    private static bool _isSuspended;
 
     [STAThread]
     public static int Main(string[] args)
@@ -59,20 +60,76 @@ public static class Program
         pump.OnHaptic = () => platform?.Haptic(HapticKind.Click);
         _gamepadSource.Start();
 
+        // Lifecycle state is touched only on the UI thread, so a pending suspend can never
+        // land after the window has been reactivated.
+        var suspendTimer = new Avalonia.Threading.DispatcherTimer();
+        suspendTimer.Tick += (_, _) =>
+        {
+            suspendTimer.Stop();
+            if (!window.IsActive || window.WindowState == Avalonia.Controls.WindowState.Minimized)
+                Suspend();
+        };
+
+        void Suspend()
+        {
+            suspendTimer.Stop();
+            if (_isSuspended) return;
+            _isSuspended = true;
+            App.RaiseSuspended();
+            AppLog.Info("lifecycle", "Desktop window suspended (deactivated/minimized)");
+        }
+
+        void ScheduleSuspend(TimeSpan delay)
+        {
+            suspendTimer.Stop();
+            suspendTimer.Interval = delay;
+            suspendTimer.Start();
+        }
+
+        void Resume()
+        {
+            suspendTimer.Stop();
+            if (!_isSuspended) return;
+            _isSuspended = false;
+            App.RaiseResumed();
+            AppLog.Info("lifecycle", "Desktop window resumed");
+        }
+
         window.Deactivated += (_, _) =>
         {
             _gamepadSource.SetWindowActive(false);
             pump.Reset();
+            ScheduleSuspend(TimeSpan.FromSeconds(2));
         };
 
-        window.Activated += (_, _) => _gamepadSource.SetWindowActive(true);
+        window.Activated += (_, _) =>
+        {
+            _gamepadSource.SetWindowActive(true);
+            Resume();
+        };
+
+        window.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == Avalonia.Controls.Window.WindowStateProperty && e.NewValue is Avalonia.Controls.WindowState state)
+            {
+                if (state == Avalonia.Controls.WindowState.Minimized)
+                {
+                    Suspend();
+                }
+                else if (window.IsActive)
+                {
+                    Resume();
+                }
+            }
+        };
 
         window.Closed += (_, _) =>
         {
+            suspendTimer.Stop();
             _gamepadSource?.Dispose();
             pump.Dispose();
         };
 
-        AppLog.Info("input", "Desktop gamepad and keyboard sources initialized");
+        AppLog.Info("input", "Desktop gamepad, keyboard sources, and window lifecycle initialized");
     }
 }

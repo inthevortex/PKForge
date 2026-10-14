@@ -2,7 +2,8 @@
 
     python3 tools/BadApple/build.py <video file>
 
-Writes src/PKForge.App/Resources/BadApple/frames.bin and audio.m4a. Needs ffmpeg.
+Writes src/PKForge.App/Resources/BadApple/frames.bin, audio.m4a (AAC, for Android's MediaPlayer) and
+audio.ogg (Vorbis, for the desktop head's SDL_mixer). Needs ffmpeg built with libvorbis.
 
 frames.bin: "BAPL", then width, height, fps and frame count as little-endian uint16, then a
 gzip stream of every frame as 1-bit rows (MSB first, 1 = white), each XORed with the frame
@@ -31,9 +32,11 @@ def main(video: str) -> None:
     delta[1:] ^= packed[:-1]
     header = b"BAPL" + struct.pack("<4H", WIDTH, HEIGHT, FPS, len(frames))
     (OUT / "frames.bin").write_bytes(header + gzip.compress(delta.tobytes(), 9, mtime=0))
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", video, "-vn", "-ac", "1", "-c:a", "aac", "-b:a", "64k",
-                    "-map_metadata", "-1", str(OUT / "audio.m4a")], check=True)
-    print(f"{len(frames)} frames, {(OUT / 'frames.bin').stat().st_size} + {(OUT / 'audio.m4a').stat().st_size} bytes")
+    for name, codec in (("audio.m4a", ["-c:a", "aac", "-b:a", "64k"]), ("audio.ogg", ["-c:a", "libvorbis", "-b:a", "96k"])):
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", video, "-vn", "-ac", "1", *codec,
+                        "-map_metadata", "-1", str(OUT / name)], check=True)
+    sizes = " + ".join(str((OUT / name).stat().st_size) for name in ("frames.bin", "audio.m4a", "audio.ogg"))
+    print(f"{len(frames)} frames, {sizes} bytes")
 
 
 if __name__ == "__main__":
