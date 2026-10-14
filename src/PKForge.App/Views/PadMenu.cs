@@ -73,31 +73,51 @@ public sealed class PadMenu : IPadHandler
             Grid.SetColumn(button, i % _columns);
         }
 
-        var content = new VerticalStackLayout { Spacing = 10 };
         // The title as a section chip, the same as the editor's and the summary's sections.
-        content.Children.Add(EditorRows.EditorSection(title));
-        if (!string.IsNullOrEmpty(message))
+        var heading = EditorRows.EditorSection(title);
+        var messageLabel = string.IsNullOrEmpty(message) ? null : new Label
         {
-            content.Children.Add(new Label
-            {
-                Text = message,
-                TextColor = UiTokens.Ink1,
-                FontSize = UiTokens.TextSmall,
-                LineBreakMode = LineBreakMode.WordWrap,
-            });
-        }
-        content.Children.Add(grid);
-        content.Children.Add(Kit.WindowHints(("A", "Choose", () => OnPadButton(PadButton.A)), ("B", "Cancel", () => Close(null))));
+            Text = message,
+            TextColor = UiTokens.Ink1,
+            FontSize = UiTokens.TextSmall,
+            LineBreakMode = LineBreakMode.WordWrap,
+        };
+        var hints = Kit.WindowHints(("A", "Choose", () => OnPadButton(PadButton.A)), ("B", "Cancel", () => Close(null)));
 
-        // PadMenu owns the ScrollView (same structure as OverlayWindow's default) so
-        // Highlight can scroll the cursor into view; the window caps to the host.
         // A short menu sizes to its options; only a tall one scrolls (a ScrollView always
         // claimed the full host height and left a tall empty panel under two choices).
         var estimate = 60 + rowCount * (buttonHeight + 8) + 60 + (string.IsNullOrEmpty(message) ? 0 : 20 + message.Length / 60 * 18);
         var hostHeight = host.Height > 0 ? host.Height - 16 : 344;
-        View list = estimate < hostHeight - 24 ? content : _scroll = new ScrollView { Content = content };
-        // Fit-to-host: the window is capped to the Thor's actual screen (host.Height - 16),
-        var window = Kit.OverlayWindow(host, list, preferredMaxWidth: 640, scroll: false);
+        View body;
+        if (estimate < hostHeight - 24)
+        {
+            var content = new VerticalStackLayout { Spacing = 10, Children = { heading } };
+            if (messageLabel is not null) content.Children.Add(messageLabel);
+            content.Children.Add(grid);
+            content.Children.Add(hints);
+            body = content;
+        }
+        else
+        {
+            // Only the message and options scroll, between the title and the A/B hints, so the
+            // hints stay on screen however short the host. PadMenu owns this ScrollView so
+            // Highlight can scroll the cursor into view.
+            var scrolled = new VerticalStackLayout { Spacing = 10 };
+            if (messageLabel is not null) scrolled.Children.Add(messageLabel);
+            scrolled.Children.Add(grid);
+            _scroll = new ScrollView { Content = scrolled };
+            var layout = new Grid
+            {
+                RowSpacing = 10,
+                RowDefinitions = [new(GridLength.Auto), new(GridLength.Star), new(GridLength.Auto)],
+            };
+            layout.Add(heading, 0, 0);
+            layout.Add(_scroll, 0, 1);
+            layout.Add(hints, 0, 2);
+            body = layout;
+        }
+        // The window caps itself to the host (host.Height - 16).
+        var window = Kit.OverlayWindow(host, body, preferredMaxWidth: 640, scroll: false);
         _overlay = Kit.AttachOverlay(host, window, () => Close(null));
         Highlight(0);
         _router?.Push(this);
