@@ -13,6 +13,7 @@ namespace PKForge.App.Views;
 public sealed class HomePage : ContentPage, IPadHandler
 {
     private readonly SavePickerViewModel _viewModel;
+    private readonly IAppPlatform _appPlatform;
     private ScrollView _shelf = null!;
     private HorizontalStackLayout _shelfItems = null!;
     private int _shelfIndex = -1;
@@ -22,9 +23,11 @@ public sealed class HomePage : ContentPage, IPadHandler
     private PokeparkPage? _parkPage;
     private int _parkNavigationPending;
 
-    public HomePage(SavePickerViewModel viewModel)
+    public HomePage(SavePickerViewModel viewModel, IAppPlatform? appPlatform = null)
     {
         _viewModel = viewModel;
+        _appPlatform = appPlatform ?? IPlatformApplication.Current?.Services.GetRequiredService<IAppPlatform>()
+            ?? throw new InvalidOperationException("IAppPlatform is unavailable.");
         BindingContext = viewModel;
         Title = "PKForge";
         BackgroundColor = UiTokens.Housing;
@@ -644,9 +647,10 @@ public sealed class HomePage : ContentPage, IPadHandler
                 _ => "Save in game and close the emulator. Select its saves folder (or the folder containing your battery saves). Save states are not supported. Restart the game normally after editing.",
             };
             var proceed = await PadMenu.ShowAsync(_hostGrid, $"Link {choice}",
-                guidance + " If Android does not offer access to the folder, use Single save file with an exported save.",
+                guidance + PlatformText.FolderAccessHint,
                 new PadOption("Choose folder", IconPath: "folder"), new PadOption("Back", IconPath: "back"));
             if (proceed != "Choose folder") continue;
+            if (!await PickerIsFreeAsync()) return;
             switch (choice)
             {
                 case "RetroArch": await _viewModel.AddRetroArchCommand.ExecuteAsync(null); break;
@@ -930,7 +934,7 @@ public sealed class HomePage : ContentPage, IPadHandler
                 case var add when add?.StartsWith("Add music files", StringComparison.Ordinal) == true:
                 {
                     var picker = IPlatformApplication.Current?.Services.GetService<Domain.IDocumentPicker>();
-                    if (picker is null) break;
+                    if (picker is null || !await PickerIsFreeAsync()) break;
                     var documents = await picker.PickManyAsync();
                     if (documents.Count == 0) break;
                     var added = music.Add(documents);
@@ -994,7 +998,7 @@ public sealed class HomePage : ContentPage, IPadHandler
             new PadOption($"Download full sprite pack ({SpritePackDownloader.SizeHint})", IconPath: "download", Detail: "Animated sprites, HOME pictures and item icons, to use offline."),
             new PadOption("Rescan games", IconPath: "refresh", Detail: "Look through your linked folders for saves again."),
             new PadOption("Scan report", IconPath: "report", Detail: "What the last scan found in each folder, to copy and send us."),
-            new PadOption("Share logs", IconPath: "export", Detail: "Crash reports and recent activity, to send us when something goes wrong."),
+            new PadOption(PlatformText.LogsAction, IconPath: "export", Detail: PlatformText.LogsDetail),
             new PadOption(SecondScreenMode.UserOff ? "Second screen: OFF" : "Second screen: ON", IconPath: "compact",
                 Detail: "OFF keeps PKForge on one screen, so the other stays free (an emulator, say)."),
             new PadOption(Services.HaXMode.IsOn ? "HaX mode: ON" : "HaX mode: OFF", IconPath: "hax",
@@ -1022,7 +1026,7 @@ public sealed class HomePage : ContentPage, IPadHandler
                 // Called directly: the command refuses to start while an older run it owns is still pending.
                 await _viewModel.RescanAsync();
                 break;
-            case "Share logs":
+            case PlatformText.LogsAction:
                 await ShareLogsAsync();
                 break;
             case "Second screen: ON" or "Second screen: OFF":
@@ -1092,12 +1096,12 @@ public sealed class HomePage : ContentPage, IPadHandler
                 ["scan-report.txt"] = _viewModel.ScanReport,
             }));
             AppLog.MarkCrashesSeen();
-            await Share.Default.RequestAsync(new ShareFileRequest("PKForge logs", new ShareFile(archive, "application/zip")));
+            await _appPlatform.ExportFilesAsync("PKForge logs", [archive]);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             AppLog.Error("logs", "Sharing the logs failed", error);
-            await PadMenu.ShowAsync(_hostGrid, "Share logs", $"The logs could not be packed: {error.Message}", "OK");
+            await PadMenu.ShowAsync(_hostGrid, PlatformText.LogsAction, $"The logs could not be packed: {error.Message}", "OK");
         }
     }
 
@@ -1109,9 +1113,9 @@ public sealed class HomePage : ContentPage, IPadHandler
         if (AppLog.UnseenCrashes().Count == 0) return;
         var choice = await PadMenu.ShowAsync(_hostGrid, "PKForge closed unexpectedly",
             "A crash report was saved. Sharing it helps us fix it: it holds the error, your recent activity, file names and your device model, never your save data.",
-            "Share report", "Not now");
+            PlatformText.CrashReportAction, "Not now");
         AppLog.MarkCrashesSeen();
-        if (choice == "Share report") await ShareLogsAsync();
+        if (choice == PlatformText.CrashReportAction) await ShareLogsAsync();
     }
 
     /// <summary>Downloads every species' animated + HOME sprites for full offline use.</summary>
@@ -1170,8 +1174,22 @@ public sealed class HomePage : ContentPage, IPadHandler
 
     private static string Megabytes(long bytes) => $"{Math.Max(0, bytes) >> 20:N0} MB";
 
+    /// <summary>
+    /// False, after telling the player, while a system file or folder picker is already open:
+    /// a second one would be refused without a word.
+    /// </summary>
+    private async Task<bool> PickerIsFreeAsync()
+    {
+        if (!PKForge.Infrastructure.DialogConcurrencyGuard.IsActive) return true;
+        AppLog.Info("home", "A picker was requested while another is open");
+        await PadMenu.ShowAsync(_hostGrid, "A file picker is already open",
+            "Finish with the open file picker, or close it, then try again.", "OK");
+        return false;
+    }
+
     private async Task LinkFileAsync()
     {
+        if (!await PickerIsFreeAsync()) return;
         await _viewModel.LinkFileCommand.ExecuteAsync(null);
         if (_viewModel.OpenedSave)
             await PushAsync<BoxBrowserPage>();

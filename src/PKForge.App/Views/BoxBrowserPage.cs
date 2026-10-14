@@ -22,6 +22,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
     private readonly BoxBrowserViewModel _viewModel;
     private readonly ISpriteService _sprites;
     private readonly ThemeService _theme;
+    private readonly IAppPlatform _appPlatform;
     private readonly SKCanvasView _canvas;
     private readonly SKCanvasView _boxBar;
     private readonly SKCanvasView _boxNeighbors;
@@ -66,9 +67,11 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
         _partyPulseTimer = null;
     }
 
-    public BoxBrowserPage(BoxBrowserViewModel viewModel, ISpriteService sprites, ThemeService theme)
+    public BoxBrowserPage(BoxBrowserViewModel viewModel, ISpriteService sprites, ThemeService theme, IAppPlatform? appPlatform = null)
     {
         _viewModel = viewModel;
+        _appPlatform = appPlatform ?? IPlatformApplication.Current?.Services.GetRequiredService<IAppPlatform>()
+            ?? throw new InvalidOperationException("IAppPlatform is unavailable.");
         _viewModel.ConfirmHackRisk = async _ =>
         {
             var choice = await PadMenu.ShowAsync(_hostGrid, RomHackNotice.Title, RomHackNotice.Warning,
@@ -1226,11 +1229,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
                 Directory.CreateDirectory(directory);
                 var paths = _viewModel.BulkExport(directory);
                 if (paths.Count == 0) return;
-                await Share.Default.RequestAsync(new ShareMultipleFilesRequest
-                {
-                    Title = $"{paths.Count} Pokémon",
-                    Files = paths.Select(p => new ShareFile(p)).ToList(),
-                });
+                await _appPlatform.ExportFilesAsync($"{paths.Count} Pokémon", paths);
                 _viewModel.Status = $"Exported {paths.Count} Pokémon.";
                 break;
             }
@@ -1470,7 +1469,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
             case "Share as file":
                 var path = System.IO.Path.Combine(FileSystem.CacheDirectory, $"box-{_viewModel.BoxIndex + 1}.txt");
                 await File.WriteAllTextAsync(path, text);
-                await Share.Default.RequestAsync(new ShareFileRequest { Title = "Showdown team", File = new ShareFile(path) });
+                await _appPlatform.ExportFilesAsync("Showdown team", [path]);
                 return;
         }
     }
@@ -1666,7 +1665,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
         if (text.Length == 0) { _viewModel.Status = "This box is empty"; return; }
         var path = Path.Combine(FileSystem.CacheDirectory, $"box-{_viewModel.BoxIndex + 1:00}-showdown.txt");
         File.WriteAllText(path, text);
-        await Share.Default.RequestAsync(new ShareFileRequest { Title = $"Box {_viewModel.BoxIndex + 1:00} Showdown", File = new ShareFile(path) });
+        await _appPlatform.ExportFilesAsync($"Box {_viewModel.BoxIndex + 1:00} Showdown", [path]);
     }
 
     private Task ImportShowdownSetsToBoxAsync() => ImportShowdownPreviewedAsync("Import Showdown sets");
@@ -2029,11 +2028,9 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
         {
             var path = System.IO.Path.Combine(FileSystem.CacheDirectory, "pkforge-audit.txt");
             await File.WriteAllTextAsync(path, text);
-            await Share.Default.RequestAsync(new ShareFileRequest
-            {
-                Title = "PKForge audit report",
-                File = new ShareFile(path),
-            });
+            var platform = IPlatformApplication.Current?.Services.GetRequiredService<IAppPlatform>()
+                ?? throw new InvalidOperationException("IAppPlatform is unavailable.");
+            await platform.ExportFilesAsync("PKForge audit report", [path]);
         }
         catch (Exception error)
         {
@@ -2442,11 +2439,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
             if (string.IsNullOrWhiteSpace(extension)) extension = ".sav";
             var path = Path.Combine(FileSystem.CacheDirectory, $"{baseName}-modified{extension}");
             await File.WriteAllBytesAsync(path, session.Serialize().ToArray());
-            await Share.Default.RequestAsync(new ShareFileRequest
-            {
-                Title = "Export modified save",
-                File = new ShareFile(path),
-            });
+            await _appPlatform.ExportFilesAsync("Export modified save", [path]);
             _viewModel.Status = $"Exported {Path.GetFileName(path)}";
         }
         catch (Exception error)
@@ -4187,11 +4180,7 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
             var export = session.ExportSlot(_viewModel.BoxIndex, slot);
             var path = System.IO.Path.Combine(FileSystem.CacheDirectory, export.FileName);
             await File.WriteAllBytesAsync(path, export.Data);
-            await Share.Default.RequestAsync(new ShareFileRequest
-            {
-                Title = export.FileName,
-                File = new ShareFile(path),
-            });
+            await _appPlatform.ExportFilesAsync(export.FileName, [path]);
             _viewModel.Status = $"Exported {export.FileName}";
         }
         catch (Exception error)

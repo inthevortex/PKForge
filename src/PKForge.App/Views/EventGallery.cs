@@ -1572,7 +1572,9 @@ public static class EventGallery
                 }
                 var path = System.IO.Path.Combine(FileSystem.CacheDirectory, export.FileName);
                 await File.WriteAllBytesAsync(path, export.Data);
-                await Share.Default.RequestAsync(new ShareFileRequest { Title = Shown.Title, File = new ShareFile(path) });
+                var platform = IPlatformApplication.Current?.Services.GetRequiredService<IAppPlatform>()
+                    ?? throw new InvalidOperationException("IAppPlatform is unavailable.");
+                await platform.ExportFilesAsync(Shown.Title, [path]);
                 _note.Text = $"Exported {export.FileName}";
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
