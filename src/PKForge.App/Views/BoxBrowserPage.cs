@@ -452,32 +452,11 @@ public sealed partial class BoxBrowserPage : ContentPage, IPadPagingHandler, IPa
         }
     }
 
-    /// <summary>The NDS12 face (the chrome's PixelUI voice), cached once for Skia text.</summary>
-    private static SKTypeface _pixelTypeface = null!;
+    private static SKTypeface? _pixelTypeface;
 
-    internal static SKTypeface PixelTypeface()
-    {
-        if (_pixelTypeface is not null) return _pixelTypeface;
-        try
-        {
-            // Bundled font copied to cache once (the ball-icon pattern), then opened by path.
-            var cache = System.IO.Path.Combine(FileSystem.CacheDirectory, "NDS12.ttf");
-            if (!File.Exists(cache))
-            {
-                using var asset = FileSystem.OpenAppPackageFileAsync("NDS12.ttf").GetAwaiter().GetResult();
-                using var output = File.Create(cache);
-                asset.CopyTo(output);
-            }
-            _pixelTypeface = SKTypeface.FromFile(cache);
-        }
-        catch
-        {
-            // ignored: fall back to the bold system face below
-        }
-        _pixelTypeface ??= SKTypeface.FromFamilyName(null, SKFontStyle.Bold);
-        return _pixelTypeface;
-    }
-
+    /// <summary>The NDS12 face (the chrome's PixelUI voice) for Skia text, or a bold system face when it cannot load.</summary>
+    internal static SKTypeface PixelTypeface() =>
+        _pixelTypeface ??= PixelFont.LoadedFace ?? SKTypeface.FromFamilyName(null, SKFontStyle.Bold);
 
     // The box and the editor panel split the width as the mockup does: 1072 to 740.
     private static readonly GridLength PanelWidth = new(740, GridUnitType.Star);
