@@ -54,18 +54,32 @@ public sealed class LoadingOverlay
         _pad = new PadOverlay(() => Cancellation.Cancel(), () => Cancellation.Cancel());
     }
 
-    public void Report(int done, int total) => MainThread.BeginInvokeOnMainThread(() =>
-    {
-        _progress.Text = $"{done} / {total}";
-        _bar.Progress = total == 0 ? 0 : (double)done / total;
-    });
+    public void Report(int done, int total) => Report($"{done} / {total}", total == 0 ? 0 : (double)done / total);
 
-    /// <summary>Free-form progress ("Downloading 12 / 240 MB") with a 0-1 bar.</summary>
-    public void Report(string text, double fraction) => MainThread.BeginInvokeOnMainThread(() =>
+    private const long ReportIntervalMs = 100;
+    private readonly ProgressCoalescer _updates = new(ReportIntervalMs, () => Environment.TickCount64);
+
+    /// <summary>
+    /// Free-form progress ("Downloading 12 / 240 MB") with a 0-1 bar. Reports from any thread
+    /// coalesce into one pending update, at most every <see cref="ReportIntervalMs"/>, that shows
+    /// the latest: a fast worker cannot queue enough of them to starve the UI thread's input,
+    /// the Cancel button among it.
+    /// </summary>
+    public void Report(string text, double fraction)
     {
-        _progress.Text = text;
-        _bar.Progress = Math.Clamp(fraction, 0, 1);
-    });
+        if (_updates.Offer(text, fraction) is not { } wait) return;
+        if (wait > 0)
+            _ = Task.Delay(TimeSpan.FromMilliseconds(wait)).ContinueWith(_ => MainThread.BeginInvokeOnMainThread(ShowLatest), TaskScheduler.Default);
+        else
+            MainThread.BeginInvokeOnMainThread(ShowLatest);
+    }
+
+    private void ShowLatest()
+    {
+        var latest = _updates.Take();
+        _progress.Text = latest.Text;
+        _bar.Progress = Math.Clamp(latest.Fraction, 0, 1);
+    }
 
     public void Close() => MainThread.BeginInvokeOnMainThread(() =>
     {

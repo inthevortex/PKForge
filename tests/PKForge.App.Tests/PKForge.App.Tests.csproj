@@ -15,6 +15,7 @@
   <ItemGroup>
     <Compile Include="../../src/PKForge.App/Services/PadInputPump.cs" />
     <Compile Include="../../src/PKForge.App/Services/GamepadRouting.cs" />
+    <Compile Include="../../src/PKForge.App/Views/ProgressCoalescer.cs" />
     <Compile Include="../../src/PKForge.App/Services/DesignMetrics.cs" />
     <Compile Include="../../src/PKForge.App/Platforms/Android/ScrollRequestTracker.cs" />
   </ItemGroup>

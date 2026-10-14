@@ -1051,10 +1051,10 @@ public sealed class HomePage : ContentPage, IPadHandler
         }
         var overlay = LoadingOverlay.Show(_hostGrid, "Catching all the sprites!",
             "Downloading animated battle sprites and HOME renders for every Pokémon. You can cancel anytime; finished parts are kept and it resumes where it left off.");
+        SpritePackResult? result = null;
         try
         {
-            await downloader.RunAsync(overlay.Report, overlay.Cancellation.Token);
-            _viewModel.Status = "Sprite pack complete - fully offline now.";
+            result = await downloader.RunAsync(overlay.Report, overlay.Cancellation.Token);
         }
         catch (OperationCanceledException)
         {
@@ -1062,13 +1062,38 @@ public sealed class HomePage : ContentPage, IPadHandler
         }
         catch (Exception error)
         {
+            AppLog.Error("sprites", "Sprite pack download failed", error);
             _viewModel.Status = $"Sprite pack stopped: {error.Message}";
         }
         finally
         {
             overlay.Close();
         }
+        if (result is null) return;
+        AppLog.Info("sprites", $"Sprite pack download: {result.Status}, {result.Missing} missing");
+        switch (result.Status)
+        {
+            case SpritePackStatus.Complete:
+                _viewModel.Status = "Sprite pack complete - fully offline now.";
+                break;
+            case SpritePackStatus.Offline:
+                await PadMenu.ShowAsync(_hostGrid, "Sprite pack",
+                    "The sprite pack needs an internet connection. Everything else works offline; try again once you are connected.", "OK");
+                break;
+            case SpritePackStatus.NoSpace:
+                await PadMenu.ShowAsync(_hostGrid, "Not enough space",
+                    $"The sprite pack needs about {Megabytes(result.SpaceNeeded)} free while it unpacks, and there is {Megabytes(result.SpaceFree)}. Free up some space and try again.", "OK");
+                break;
+            case SpritePackStatus.Interrupted:
+                _viewModel.Status = "Sprite pack paused: the download stopped part-way. Try again from Settings to resume where it left off.";
+                break;
+            case SpritePackStatus.Incomplete:
+                _viewModel.Status = $"Sprite pack: {result.Missing} files could not be downloaded. Try again from Settings to fetch them.";
+                break;
+        }
     }
+
+    private static string Megabytes(long bytes) => $"{Math.Max(0, bytes) >> 20:N0} MB";
 
     private async Task LinkFileAsync()
     {

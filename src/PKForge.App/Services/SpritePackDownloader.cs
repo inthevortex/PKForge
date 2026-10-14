@@ -1,42 +1,52 @@
-using System.IO.Compression;
-using System.Net;
-using System.Security.Cryptography;
 using PKForge.Domain;
+using PKForge.Infrastructure;
 
 namespace PKForge.App.Services;
+
+/// <summary>How a sprite pack download ended.</summary>
+public enum SpritePackStatus
+{
+    /// <summary>Every pack file is on the device.</summary>
+    Complete,
+
+    /// <summary>No network: nothing was attempted.</summary>
+    Offline,
+
+    /// <summary>Not enough free space for the archive; nothing was downloaded.</summary>
+    NoSpace,
+
+    /// <summary>The download stopped part-way; the next run resumes it.</summary>
+    Interrupted,
+
+    /// <summary>The run finished, but some files could not be fetched.</summary>
+    Incomplete,
+}
+
+/// <summary>A download's outcome, with the files still missing or the space it lacked.</summary>
+public sealed record SpritePackResult(SpritePackStatus Status, int Missing = 0, long SpaceNeeded = 0, long SpaceFree = 0);
 
 /// <summary>
 /// Downloads the complete offline sprite pack: animated Showdown sprites, HOME renders and
 /// item icons. The fast path is one archive (built by tools/SpritePack, published as a
-/// release asset): a single resumable download, checked against its SHA-256, then unpacked
-/// file by file into the same caches the app already reads. Whatever is still missing after
-/// that, or everything when the archive is unavailable, is fetched file by file. Purely
-/// additive and resumable: existing files are never touched.
+/// release asset) put in place by <see cref="SpritePackArchiveInstaller"/>: a single resumable
+/// download, checked against its SHA-256, then unpacked file by file into the same caches the
+/// app already reads. Whatever is still missing after that, or everything when the archive is
+/// unavailable, is fetched file by file. Purely additive and resumable: existing files are
+/// never touched.
 /// </summary>
 public sealed class SpritePackDownloader(ISpriteService sprites, IGameDataService data)
 {
     /// <summary>Rough size of the full pack; shown before starting.</summary>
     public const string SizeHint = "~600 MB";
 
-    /// <summary>
-    /// One downloadable archive: its release asset, exact size and SHA-256 (printed by
-    /// tools/SpritePack). A new archive gets a new release tag, so an app build always
-    /// verifies exactly the bytes it expects, and an archive never changes once published.
-    /// </summary>
-    private sealed record Archive(string Name, string Url, long Bytes, string Sha256)
-    {
-        /// <summary>Written once this archive is unpacked; the main pack's name predates add-ons and is kept.</summary>
-        public string DoneMarker(string root) => Path.Combine(root, "spritepack", Sha256[..16] + ".done");
-    }
-
     // The main pack: Showdown animations, HOME renders, item icons. Falls back to per-file downloads.
-    private static readonly Archive Main = new("Sprite pack",
+    private static readonly SpritePackArchive Main = new("Sprite pack",
         "https://github.com/sofianeelhor/PKForge/releases/download/sprites-1/pkforge-sprites.zip",
         625_017_170, "611f384b2475f24946ecd51ba8a726aafffc04736f0cedf47236a1ac00ff6cd7");
 
     // Add-ons: archive only, no per-file source. A new add-on is appended here; players who
     // have the others fetch just that one. Missing add-ons change nothing: their art is optional.
-    private static readonly Archive[] AddOns =
+    private static readonly SpritePackArchive[] AddOns =
     [
         // BDSP-style box icons, normal and shiny (Team Luminescent's bdsp-shiny-icons, MIT),
         // drawn in Brilliant Diamond / Shining Pearl and Luminescent Platinum boxes.
@@ -49,7 +59,8 @@ public sealed class SpritePackDownloader(ISpriteService sprites, IGameDataServic
 
     private const int Parallelism = 16;
 
-    private static readonly HttpClient ArchiveHttp = new() { Timeout = Timeout.InfiniteTimeSpan };
+    private static readonly SpritePackArchiveInstaller Installer = new(
+        new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, SpritePackArchiveInstaller.FreeSpace, TimeSpan.FromSeconds(30));
 
     /// <summary>How many pack files this device still lacks; 0 once the pack is complete.</summary>
     public int CountMissing()
@@ -65,17 +76,38 @@ public sealed class SpritePackDownloader(ISpriteService sprites, IGameDataServic
         ? []
         : [.. data.ItemNames.Where(n => SpritePack.ItemSlug(n).Length > 0).Distinct().Where(n => !ItemArt.IsCachedOrKnownMissing(n))];
 
-    public async Task RunAsync(Action<string, double> onProgress, CancellationToken cancellationToken)
+    /// <summary>
+    /// Downloads whatever the device lacks, off the UI thread. Cancelling throws
+    /// <see cref="OperationCanceledException"/>; everything finished so far is kept.
+    /// </summary>
+    public Task<SpritePackResult> RunAsync(Action<string, double> onProgress, CancellationToken cancellationToken) =>
+        Task.Run(() => RunCoreAsync(onProgress, cancellationToken), cancellationToken);
+
+    private async Task<SpritePackResult> RunCoreAsync(Action<string, double> onProgress, CancellationToken cancellationToken)
     {
+        if (Connectivity.Current.NetworkAccess is NetworkAccess.None or NetworkAccess.Local)
+            return new SpritePackResult(SpritePackStatus.Offline);
+
         var root = FileSystem.AppDataDirectory;
         var spriteEntries = SpritePack.Entries([]);
         var missing = spriteEntries.Count(e => !File.Exists(Path.Combine(root, e.CachePath))) + WantedItems(root).Count;
-        if (missing >= ArchiveThreshold && await TryArchiveAsync(root, Main, onProgress, cancellationToken).ConfigureAwait(false))
-            await File.WriteAllTextAsync(Main.DoneMarker(root), Main.Url, cancellationToken).ConfigureAwait(false);
+        if (missing >= ArchiveThreshold)
+        {
+            var archive = await Installer.InstallAsync(root, Main, onProgress, cancellationToken).ConfigureAwait(false);
+            switch (archive.Outcome)
+            {
+                case ArchiveOutcome.NoSpace:
+                    return new SpritePackResult(SpritePackStatus.NoSpace, SpaceNeeded: archive.SpaceNeeded, SpaceFree: archive.SpaceFree);
+                case ArchiveOutcome.Interrupted:
+                    return new SpritePackResult(SpritePackStatus.Interrupted);
+            }
+        }
 
         await DownloadMissingAsync(root, spriteEntries, WantedItems(root), onProgress, cancellationToken).ConfigureAwait(false);
-
         await FetchAddOnsAsync(root, onProgress, cancellationToken).ConfigureAwait(false);
+
+        var left = CountMissing();
+        return left == 0 ? new SpritePackResult(SpritePackStatus.Complete) : new SpritePackResult(SpritePackStatus.Incomplete, left);
     }
 
     // One add-on download at a time: the quiet one and a full download share archive files.
@@ -122,125 +154,17 @@ public sealed class SpritePackDownloader(ISpriteService sprites, IGameDataServic
             var complete = true;
             foreach (var addOn in AddOns.Where(a => !File.Exists(a.DoneMarker(root))))
             {
-                if (await TryArchiveAsync(root, addOn, onProgress, cancellationToken).ConfigureAwait(false))
-                    await File.WriteAllTextAsync(addOn.DoneMarker(root), addOn.Url, cancellationToken).ConfigureAwait(false);
-                else
+                var result = await Installer.InstallAsync(root, addOn, onProgress, cancellationToken).ConfigureAwait(false);
+                if (result.Outcome != ArchiveOutcome.Installed)
+                {
                     complete = false;
+                    AppLog.Warn("sprites", $"{addOn.Name}: {result.Outcome}");
+                }
             }
             sprites.ForgetAddOnLookups(); // icons that were absent a minute ago may be here now
             return complete;
         }
         finally { AddOnGate.Release(); }
-    }
-
-    /// <summary>
-    /// The one-request path; true once the archive is unpacked. Any failure (offline, asset
-    /// not published, damaged download, not enough space) returns false: the per-file pass
-    /// that follows covers everything.
-    /// </summary>
-    private static async Task<bool> TryArchiveAsync(string root, Archive source, Action<string, double> onProgress, CancellationToken cancellationToken)
-    {
-        var folder = Path.Combine(root, "spritepack");
-        var archive = Path.Combine(folder, Path.GetFileName(new Uri(source.Url).LocalPath));
-        var partial = archive + ".part";
-        try
-        {
-            Directory.CreateDirectory(folder);
-            // The archive and its unpacked files coexist until unpacking ends.
-            var needed = source.Bytes * 2 + (64L << 20) - (File.Exists(partial) ? new FileInfo(partial).Length : 0);
-            if (new DriveInfo(root).AvailableFreeSpace < needed) return false;
-
-            if (!File.Exists(archive))
-            {
-                await DownloadArchiveAsync(partial, source, onProgress, cancellationToken).ConfigureAwait(false);
-                onProgress($"{source.Name} · checking the download…", 1);
-                if (!await MatchesAsync(partial, source, cancellationToken).ConfigureAwait(false))
-                {
-                    File.Delete(partial);
-                    return false;
-                }
-                File.Move(partial, archive, overwrite: true);
-            }
-
-            await UnpackAsync(archive, root, source.Name, onProgress, cancellationToken).ConfigureAwait(false);
-            File.Delete(archive);
-            return true;
-        }
-        catch (Exception error) when (error is HttpRequestException or IOException or InvalidDataException or UnauthorizedAccessException
-                                      && !cancellationToken.IsCancellationRequested)
-        {
-            // A damaged archive is not worth resuming; a cut download is.
-            if (error is InvalidDataException) TryDelete(archive);
-            return false;
-        }
-    }
-
-    /// <summary>Downloads into <paramref name="partial"/>, resuming from what an earlier run left.</summary>
-    private static async Task DownloadArchiveAsync(string partial, Archive pack, Action<string, double> onProgress, CancellationToken cancellationToken)
-    {
-        var offset = File.Exists(partial) ? new FileInfo(partial).Length : 0;
-        if (offset > pack.Bytes) { File.Delete(partial); offset = 0; }
-        if (offset == pack.Bytes) return;
-
-        using var request = new HttpRequestMessage(HttpMethod.Get, pack.Url);
-        if (offset > 0) request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(offset, null);
-        using var response = await ArchiveHttp.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-        if (offset > 0 && response.StatusCode != HttpStatusCode.PartialContent) offset = 0; // no range support: start over
-
-        await using var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        await using var target = new FileStream(partial, offset > 0 ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, useAsync: true);
-        var buffer = new byte[1 << 16];
-        var written = offset;
-        var lastReport = 0L;
-        int read;
-        while ((read = await source.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
-        {
-            if (written + read > pack.Bytes) throw new InvalidDataException($"{pack.Name} is larger than expected.");
-            await target.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-            written += read;
-            if (written - lastReport >= 1 << 20 || written == pack.Bytes)
-            {
-                lastReport = written;
-                onProgress($"{pack.Name} · downloading {written >> 20} / {pack.Bytes >> 20} MB", (double)written / pack.Bytes);
-            }
-        }
-    }
-
-    private static async Task<bool> MatchesAsync(string path, Archive source, CancellationToken cancellationToken)
-    {
-        if (new FileInfo(path).Length != source.Bytes) return false;
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, useAsync: true);
-        var hash = await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false);
-        return Convert.ToHexStringLower(hash) == source.Sha256;
-    }
-
-    /// <summary>Writes every entry the device lacks, each through a temporary file and a rename.</summary>
-    private static async Task UnpackAsync(string archive, string root, string name, Action<string, double> onProgress, CancellationToken cancellationToken)
-    {
-        using var zip = ZipFile.OpenRead(archive);
-        var total = zip.Entries.Count;
-        var done = 0;
-        foreach (var entry in zip.Entries)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            done++;
-            if (SpritePack.IsSafeEntryName(entry.FullName))
-            {
-                var target = Path.Combine(root, entry.FullName);
-                if (!File.Exists(target))
-                {
-                    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                    var temporary = target + ".part";
-                    await using (var source = entry.Open())
-                    await using (var output = File.Create(temporary))
-                        await source.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
-                    File.Move(temporary, target, overwrite: true);
-                }
-            }
-            if (done % 100 == 0 || done == total)
-                onProgress($"{name} · unpacking {done} / {total}", (double)done / total);
-        }
     }
 
     /// <summary>The per-file pass: only what is still missing, a bounded number at a time.</summary>
@@ -280,11 +204,5 @@ public sealed class SpritePackDownloader(ISpriteService sprites, IGameDataServic
             }
         });
         await Task.WhenAll(tasks).ConfigureAwait(false);
-    }
-
-    private static void TryDelete(string path)
-    {
-        try { File.Delete(path); }
-        catch (IOException) { }
     }
 }
